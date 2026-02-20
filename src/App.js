@@ -185,7 +185,7 @@ const ProductModal = ({ item, onClose, onAdd, addonPrices }) => {
                                         if(opt === 'Large') label = `Large (+$${addonPrices.large.toFixed(2)})`;
                                         return (
                                             <button key={opt} onClick={() => setSize(opt)} className={`flex-1 py-3 rounded-xl border text-sm font-semibold transition ${size === opt ? 'bg-brand-dark text-white border-brand-dark shadow-md' : 'bg-white text-stone-600 border-stone-200 hover:border-stone-300'}`}>
-                                                {opt}
+                                                {label}
                                             </button>
                                         );
                                     })}
@@ -995,7 +995,6 @@ const CafeAdmin = ({ orders, updateOrderStatus, setView, rejectOrder, curbsideFe
     const [timeWindowMins, setTimeWindowMins] = useState(15);
     const [botChat, setBotChat] = useState([{ type: 'bot', text: 'Hi! I am your Instant Partner Support. Ask me anything about fees, menu setup, or hardware.' }]);
     const [botInput, setBotInput] = useState('');
-    const [localName, setLocalName] = useState('');
     const [selectedOrder, setSelectedOrder] = useState(null); 
     const [selectedHistoryOrder, setSelectedHistoryOrder] = useState(null);
     
@@ -1251,7 +1250,7 @@ const CafeAdmin = ({ orders, updateOrderStatus, setView, rejectOrder, curbsideFe
                             <div className="space-y-3 mb-6 max-h-60 overflow-y-auto pr-2">
                                 {menu.filter(m => m.active).map(item => (
                                     <div key={item.id} className="flex justify-between items-center p-3 bg-stone-50 rounded-lg border border-stone-100">
-                                        <div className="flex items-center gap-3"><img src={item.img} className="w-10 h-10 rounded-md object-cover" /><span className="font-medium text-sm text-brand-dark">{item.name} (${item.price.toFixed(2)})</span></div>
+                                        <div className="flex items-center gap-3"><img src={item.img} alt={item.name} className="w-10 h-10 rounded-md object-cover" /><span className="font-medium text-sm text-brand-dark">{item.name} (${item.price.toFixed(2)})</span></div>
                                         <div className="flex gap-2"><button onClick={() => setEditingItem(item)} className="text-stone-400 hover:text-brand-orange p-2 rounded hover:bg-orange-50 transition" title="Edit Item"><Icons.Edit /></button><button onClick={() => toggleItemStatus(item.id)} className="text-stone-400 hover:text-red-600 p-2 rounded hover:bg-red-50 transition" title="Hide Item"><Icons.Trash2 /></button></div>
                                     </div>
                                 ))}
