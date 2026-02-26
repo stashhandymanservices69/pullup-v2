@@ -2,22 +2,41 @@
 
 # dependencies
 /node_modules
+pullup-app/node_modules
 /.pnp
 .pnp.js
 
 # testing
 /coverage
 
+# next.js build
+pullup-app/.next/
+
 # production
 /build
 
-# misc
-.DS_Store
+# env & secrets
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+pullup-app/.env*
 
+# vercel
+.vercel
+pullup-app/.vercel
+
+# misc
+.DS_Store
+*.pem
+cookies.txt
+*.zip
+
+# debug logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# AI prompt files (not app code)
+grok-handoff-prompt.txt
+pullup-gemini-context.zip
