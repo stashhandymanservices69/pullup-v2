@@ -824,6 +824,15 @@ const CafeAuth = ({ setView, auth, db, openLegal }: any) => {
                         <p className="text-stone-400 text-sm">Capture the drive-thru market.</p>
                     </div>
 
+                    <div className="lg:hidden bg-stone-900/70 border border-stone-700 rounded-3xl p-5 mb-8">
+                        <h3 className="text-xl font-serif italic font-bold text-white mb-3 leading-tight">Turn street parking into your most profitable table.</h3>
+                        <div className="space-y-3 text-left">
+                            <p className="text-xs text-stone-300"><span className="text-orange-400 font-bold uppercase tracking-widest text-[10px]">Accessibility</span><br />Serve parents, disabled customers, and tradies without queue friction.</p>
+                            <p className="text-xs text-stone-300"><span className="text-orange-400 font-bold uppercase tracking-widest text-[10px]">Higher Margin</span><br />Keep your menu margin and earn extra via curbside fee.</p>
+                            <p className="text-xs text-stone-300"><span className="text-orange-400 font-bold uppercase tracking-widest text-[10px]">Fast Setup</span><br />No extra hardware. Apply, verify, and go live.</p>
+                        </div>
+                    </div>
+
                     <div className="bg-[#1a1a1a] p-10 rounded-[2.5rem] shadow-2xl w-full border border-stone-800/50 hover:border-orange-500/30 transition-colors">
                         <h2 className="text-2xl font-serif italic font-bold mb-1 text-white">{mode === 'apply' ? 'Join Pull Up' : 'Business Login'}</h2>
                         <p className="text-stone-500 text-[10px] uppercase tracking-[0.2em] mb-4 font-bold">{mode === 'apply' ? 'Zero contracts. Zero hardware.' : 'WELCOME BACK'}</p>
@@ -2077,9 +2086,79 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
 
 // --- CUSTOMER FLOW ---
 const Discovery = ({ setView, onSelectCafe, cafes }: any) => {
-    const [searchRadius, setSearchRadius] = useState(15); 
+    const [searchRadius, setSearchRadius] = useState(15);
     const [searchTerm, setSearchTerm] = useState('');
-    const filteredCafes = cafes.filter((c:any) => c.isApproved && (c.businessName?.toLowerCase() || '').includes(searchTerm.toLowerCase()));
+    const [areaTerm, setAreaTerm] = useState('');
+    const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+    const [locationStatus, setLocationStatus] = useState<'idle' | 'requesting' | 'granted' | 'denied' | 'error'>('idle');
+    const [locationError, setLocationError] = useState('');
+
+    const requestLocation = () => {
+        if (typeof window === 'undefined' || !navigator.geolocation) {
+            setLocationStatus('error');
+            setLocationError('Location is not supported on this device/browser.');
+            return;
+        }
+        setLocationStatus('requesting');
+        setLocationError('');
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
+                setLocationStatus('granted');
+            },
+            (error) => {
+                setUserLocation(null);
+                if (error.code === 1) {
+                    setLocationStatus('denied');
+                    setLocationError('Location permission denied. You can still search by suburb/postcode.');
+                    return;
+                }
+                setLocationStatus('error');
+                setLocationError('Unable to fetch your location right now.');
+            },
+            { enableHighAccuracy: true, timeout: 12000, maximumAge: 300000 },
+        );
+    };
+
+    useEffect(() => {
+        requestLocation();
+    }, []);
+
+    const normalizedCafeTerm = searchTerm.trim().toLowerCase();
+    const normalizedAreaTerm = areaTerm.trim().toLowerCase();
+
+    const filteredCafes = cafes
+        .filter((c: any) => c.isApproved)
+        .map((c: any) => {
+            const cafeLat = Number(c.latitude ?? c.lat);
+            const cafeLng = Number(c.longitude ?? c.lng);
+            const hasCafeCoords = Number.isFinite(cafeLat) && Number.isFinite(cafeLng);
+            const distanceKm = userLocation && hasCafeCoords
+                ? haversineDistanceMeters(userLocation.lat, userLocation.lng, cafeLat, cafeLng) / 1000
+                : null;
+
+            const matchesCafeText =
+                normalizedCafeTerm.length === 0
+                || (c.businessName?.toLowerCase() || '').includes(normalizedCafeTerm)
+                || (c.address?.toLowerCase() || '').includes(normalizedCafeTerm);
+
+            const matchesArea =
+                normalizedAreaTerm.length === 0
+                || (c.address?.toLowerCase() || '').includes(normalizedAreaTerm);
+
+            const matchesRadius =
+                locationStatus !== 'granted'
+                || (distanceKm !== null && distanceKm <= searchRadius);
+
+            return { ...c, distanceKm, matchesCafeText, matchesArea, matchesRadius };
+        })
+        .filter((c: any) => c.matchesCafeText && c.matchesArea && c.matchesRadius)
+        .sort((a: any, b: any) => {
+            if (a.distanceKm === null && b.distanceKm === null) return 0;
+            if (a.distanceKm === null) return 1;
+            if (b.distanceKm === null) return -1;
+            return a.distanceKm - b.distanceKm;
+        });
 
     const handleFavoriteCafe = async (event: React.MouseEvent, cafe: any) => {
         event.stopPropagation();
@@ -2094,11 +2173,32 @@ const Discovery = ({ setView, onSelectCafe, cafes }: any) => {
                 <button onClick={() => setView('landing')} className="mb-10 text-stone-500 font-bold flex items-center gap-2 hover:text-stone-900 transition text-xs uppercase tracking-widest"><Icons.X /> Back</button>
                 <div className="animate-fade-in text-center">
                     <h2 className="text-4xl font-serif font-bold text-stone-900 italic tracking-tighter leading-none mb-2">Nearby.</h2>
-                    <p className="text-stone-400 text-sm font-medium mb-8">Searching your area</p>
+                    <p className="text-stone-400 text-sm font-medium mb-5">
+                        {locationStatus === 'granted' ? 'Location enabled. Showing cafes in your radius.' : 'Enable location to search nearby cafes automatically.'}
+                    </p>
+
+                    <div className="bg-white p-4 rounded-2xl shadow-sm border border-stone-100 mb-5 max-w-sm mx-auto text-left">
+                        <div className="flex items-center justify-between gap-3">
+                            <p className="text-[10px] uppercase tracking-widest font-bold text-stone-500">Live Location</p>
+                            <button onClick={requestLocation} className="text-[10px] uppercase tracking-widest font-bold bg-stone-900 text-white px-3 py-2 rounded-full hover:bg-stone-800 transition">
+                                {locationStatus === 'requesting' ? 'Locating…' : (locationStatus === 'granted' ? 'Refresh' : 'Enable')}
+                            </button>
+                        </div>
+                        {locationStatus === 'granted' && userLocation && (
+                            <p className="text-xs text-stone-600 mt-2">Using your location: {userLocation.lat.toFixed(3)}, {userLocation.lng.toFixed(3)}</p>
+                        )}
+                        {(locationStatus === 'denied' || locationStatus === 'error') && (
+                            <p className="text-xs text-amber-600 mt-2">{locationError}</p>
+                        )}
+                    </div>
 
                     <div className="relative mb-8">
                         <div className="absolute left-5 top-1/2 -translate-y-1/2 text-stone-400"><Icons.Search /></div>
-                        <input type="text" placeholder="Search area or cafe..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-white border border-stone-200 rounded-full py-4 pl-14 pr-6 text-stone-900 focus:outline-none focus:border-stone-400 shadow-sm transition font-medium text-center" />
+                        <input type="text" placeholder="Search cafe name..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-white border border-stone-200 rounded-full py-4 pl-14 pr-6 text-stone-900 focus:outline-none focus:border-stone-400 shadow-sm transition font-medium text-center" />
+                    </div>
+
+                    <div className="relative mb-6">
+                        <input type="text" placeholder="Suburb or postcode (optional)" value={areaTerm} onChange={e => setAreaTerm(e.target.value)} className="w-full bg-white border border-stone-200 rounded-full py-4 px-6 text-stone-900 focus:outline-none focus:border-stone-400 shadow-sm transition font-medium text-center" />
                     </div>
 
                     <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-stone-100 mb-8 max-w-sm mx-auto">
@@ -2106,11 +2206,11 @@ const Discovery = ({ setView, onSelectCafe, cafes }: any) => {
                             <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 flex items-center gap-2"><Icons.Sliders /> Search Radius</label>
                             <span className="font-bold text-orange-500 text-sm">{searchRadius} km</span>
                         </div>
-                        <input type="range" min="1" max="50" value={searchRadius} onChange={(e: any) => setSearchRadius(e.target.value)} className="w-full accent-orange-500 h-2 bg-stone-100 rounded-lg appearance-none cursor-pointer" />
+                        <input type="range" min="1" max="50" value={searchRadius} onChange={(e: any) => setSearchRadius(Number(e.target.value))} className="w-full accent-orange-500 h-2 bg-stone-100 rounded-lg appearance-none cursor-pointer" />
                     </div>
                     
                     <div className="space-y-4 w-full">
-                        {filteredCafes.length === 0 ? <div className="text-center py-20 text-stone-400 italic">No partners found in radius.</div> : 
+                        {filteredCafes.length === 0 ? <div className="text-center py-20 text-stone-400 italic">No partners found with current filters.</div> : 
                         filteredCafes.map((c: any) => {
                             const isOpen = c.status === 'open';
                             return (
@@ -2122,6 +2222,7 @@ const Discovery = ({ setView, onSelectCafe, cafes }: any) => {
                                     <div className="flex-1 pr-8">
                                         <h3 className="font-bold text-xl text-stone-900 tracking-tight leading-none mb-1">{c.businessName}</h3>
                                         <p className="text-stone-500 text-[10px] uppercase tracking-widest font-medium truncate">{c.address}</p>
+                                        {typeof c.distanceKm === 'number' && <p className="text-[10px] text-stone-500 mt-2 font-bold uppercase tracking-widest">{c.distanceKm.toFixed(1)} km away</p>}
                                         {isOpen ? 
                                             <div className="mt-3 text-[10px] font-bold tracking-widest text-orange-500 uppercase flex items-center gap-2">● Accepting Orders</div>
                                         : 
