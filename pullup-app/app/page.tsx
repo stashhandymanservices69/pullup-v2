@@ -617,12 +617,12 @@ const LegalDocumentModal = ({ type, onClose }: any) => {
 // --- VIEWS ---
 
 const LandingPage = ({ setView, onAbout, openLegal }: any) => (
-    <div className="flex flex-col min-h-screen bg-stone-900 text-white animate-fade-in relative overflow-hidden font-sans">
+    <div className="flex flex-col min-h-screen bg-stone-900 text-white animate-fade-in relative overflow-x-hidden overflow-y-hidden font-sans">
         {/* ELEGANT TOP NAVIGATION */}
-        <div className="absolute top-6 right-6 z-50">
+        <div className="absolute top-4 right-4 left-4 sm:left-auto sm:top-6 sm:right-6 z-50 flex justify-end">
             <button 
                 onClick={() => setView('merchant-auth')} 
-                className="group relative bg-white/10 backdrop-blur-md border border-white/20 text-white px-8 py-3.5 rounded-full font-semibold text-sm hover:bg-white/20 transition-all duration-300 flex items-center gap-2.5 shadow-lg hover:shadow-xl hover:scale-105"
+                className="group relative bg-white/10 backdrop-blur-md border border-white/20 text-white px-5 sm:px-8 py-3 sm:py-3.5 rounded-full font-semibold text-xs sm:text-sm hover:bg-white/20 transition-all duration-300 flex items-center gap-2 sm:gap-2.5 shadow-lg hover:shadow-xl hover:scale-105"
             >
                 <span className="text-base">☕</span>
                 <span className="tracking-wide">For Businesses</span>
@@ -632,29 +632,29 @@ const LandingPage = ({ setView, onAbout, openLegal }: any) => (
         <div className="absolute top-0 left-0 w-full h-full bg-[url('https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1000&q=60')] bg-cover bg-center opacity-30"></div>
         <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-black/70 via-black/40 to-black/90"></div>
 
-        <div className="relative z-10 flex-1 flex flex-col items-center justify-center p-6 text-center animate-fade-in">
-            <PullUpLogo className="mb-10 w-32 h-32" />
-            <h1 className="text-6xl md:text-7xl font-serif italic mb-4 tracking-tight drop-shadow-2xl leading-none inline-flex items-start gap-2">Pull Up Coffee <span className="inline-flex items-center justify-center w-4 h-4 mt-2 rounded-full border border-white/70 text-[8px] not-italic font-bold">TM</span></h1>
-            <p className="text-stone-300 mb-14 text-xl max-w-md mx-auto italic font-light">Street parking is now your drive-thru.</p>
-            <button onClick={() => setView('discovery')} className="bg-white text-stone-900 py-6 px-16 rounded-[2.5rem] font-bold text-2xl shadow-xl hover:scale-105 transition transform flex items-center gap-4">
+        <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-5 pt-28 pb-12 sm:p-6 text-center animate-fade-in">
+            <PullUpLogo className="mb-8 sm:mb-10 w-24 h-24 sm:w-32 sm:h-32" />
+            <h1 className="text-4xl sm:text-5xl md:text-7xl font-serif italic mb-4 tracking-tight drop-shadow-2xl leading-[0.95] inline-flex items-start gap-1.5 sm:gap-2">Pull Up Coffee <span className="inline-flex items-center justify-center w-3.5 h-3.5 sm:w-4 sm:h-4 mt-1.5 sm:mt-2 rounded-full border border-white/70 text-[7px] sm:text-[8px] not-italic font-bold">TM</span></h1>
+            <p className="text-stone-300 mb-10 sm:mb-14 text-base sm:text-xl max-w-sm sm:max-w-md mx-auto italic font-light">Street parking is now your drive-thru.</p>
+            <button onClick={() => setView('discovery')} className="w-full max-w-xs sm:w-auto bg-white text-stone-900 py-4 sm:py-6 px-8 sm:px-16 rounded-[2rem] sm:rounded-[2.5rem] font-bold text-lg sm:text-2xl shadow-xl hover:scale-105 transition transform flex items-center justify-center gap-3 sm:gap-4">
                 <Icons.Car /> Order Now
             </button>
         </div>
 
         <footer className="relative z-10 bg-black/60 backdrop-blur-md border-t border-white/10 mt-auto">
-            <div className="max-w-6xl mx-auto px-6 py-7">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6 pb-6 border-b border-white/10">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-7">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 mb-6 pb-6 border-b border-white/10 text-left">
                     <div>
-                        <h4 className="font-bold text-stone-300 mb-4 text-[10px] uppercase tracking-widest">Platform</h4>
-                        <ul className="space-y-3 text-[10px] text-stone-400 font-medium">
+                        <h4 className="font-bold text-stone-300 mb-3 sm:mb-4 text-[11px] sm:text-[10px] uppercase tracking-widest">Platform</h4>
+                        <ul className="space-y-2.5 sm:space-y-3 text-xs sm:text-[10px] text-stone-400 font-medium">
                             <li><button onClick={() => setView('discovery')} className="hover:text-orange-400 transition">Order Coffee</button></li>
                             <li><button onClick={() => setView('merchant-auth')} className="hover:text-orange-400 transition">Business Login</button></li>
                             <li><button onClick={onAbout} className="hover:text-orange-400 transition">About Vision</button></li>
                         </ul>
                     </div>
                     <div>
-                        <h4 className="font-bold text-stone-300 mb-4 text-[10px] uppercase tracking-widest">Legal</h4>
-                        <ul className="space-y-3 text-[10px] text-stone-400 font-medium">
+                        <h4 className="font-bold text-stone-300 mb-3 sm:mb-4 text-[11px] sm:text-[10px] uppercase tracking-widest">Legal</h4>
+                        <ul className="space-y-2.5 sm:space-y-3 text-xs sm:text-[10px] text-stone-400 font-medium">
                             <li><button onClick={() => openLegal('terms')} className="hover:text-orange-400 transition">Terms of Service</button></li>
                             <li><button onClick={() => openLegal('privacy')} className="hover:text-orange-400 transition">Privacy Policy</button></li>
                             <li><button onClick={() => openLegal('cookies')} className="hover:text-orange-400 transition">Cookie Policy</button></li>
@@ -662,21 +662,21 @@ const LandingPage = ({ setView, onAbout, openLegal }: any) => (
                         </ul>
                     </div>
                     <div>
-                        <h4 className="font-bold text-stone-300 mb-4 text-[10px] uppercase tracking-widest">Support</h4>
-                        <ul className="space-y-3 text-[10px] text-stone-400 font-medium">
+                        <h4 className="font-bold text-stone-300 mb-3 sm:mb-4 text-[11px] sm:text-[10px] uppercase tracking-widest">Support</h4>
+                        <ul className="space-y-2.5 sm:space-y-3 text-xs sm:text-[10px] text-stone-400 font-medium">
                             <li><button onClick={() => openLegal('faq')} className="hover:text-orange-400 transition">FAQ</button></li>
                             <li><button onClick={() => openLegal('contact')} className="hover:text-orange-400 transition">Contact Us</button></li>
                             <li><button onClick={() => setView('merch')} className="hover:text-orange-400 transition">Merchandise</button></li>
                         </ul>
                     </div>
                     <div>
-                        <h4 className="font-bold text-stone-300 mb-4 text-[10px] uppercase tracking-widest">Earn</h4>
-                        <ul className="space-y-3 text-[10px] font-medium">
+                        <h4 className="font-bold text-stone-300 mb-3 sm:mb-4 text-[11px] sm:text-[10px] uppercase tracking-widest">Earn</h4>
+                        <ul className="space-y-2.5 sm:space-y-3 text-xs sm:text-[10px] font-medium">
                             <li><button onClick={() => openLegal('affiliate')} className="text-orange-400 hover:text-orange-300 transition font-bold">Affiliate (25% first month)</button></li>
                         </ul>
                     </div>
                 </div>
-                <div className="text-center text-[10px] text-stone-500">
+                <div className="text-center text-[11px] sm:text-[10px] text-stone-500">
                     <p>© 2026 Pull Up Coffee Pty Ltd. ABN: 17 587 686 972</p>
                 </div>
             </div>
