@@ -148,7 +148,7 @@ const ONBOARDING_VIDEOS = [
 
 const MIN_CURBSIDE_FEE = 2.0;
 const MAX_CURBSIDE_FEE = 6.0;
-const MIN_CART_TOTAL = 5.0;
+const MIN_CART_TOTAL = 0;
 const EARLY_ADOPTER_CAFE_LIMIT = 33;
 const LIVE_GPS_AUTO_SHARE_DISTANCE_METERS = 2500;
 const LIVE_GPS_AUTO_SHARE_ETA_SECONDS = 300;
@@ -427,10 +427,9 @@ const LegalDocumentModal = ({ type, onClose }: any) => {
                             <p className="text-xs mb-3"><strong>5. Authorisation Hold & Capture:</strong> Upon checkout, Pull Up places a temporary authorisation hold on your card (not a charge). The cafe reviews your order and either accepts (capturing payment) or declines (releasing the hold). Ghost holds that remain unactioned are automatically swept and released within 72 hours.</p>
                             <p className="text-xs mb-3"><strong>6. Refunds & Chargebacks:</strong> Refund eligibility is determined by the individual café partner. Customers must arrive within the agreed grace period or risk order forfeiture. The platform reserves the right to process payment reversals and chargebacks as permitted by law.</p>
                             <p className="text-xs mb-3"><strong>7. Traffic Compliance:</strong> All orders must be picked up from a legally parked vehicle. Do not interact with this app while driving. Pull Up Coffee accepts zero liability for traffic infringements, accidents, or parking violations.</p>
-                            <p className="text-xs mb-3"><strong>8. Minimum Order:</strong> A minimum cart value of $5.00 (before fees) is required per transaction to ensure service viability for cafe partners.</p>
-                            <p className="text-xs mb-3"><strong>9. Liability & Safety Framework:</strong> Pull Up Coffee is a software platform bridge only. The cafe is responsible for safe preparation, temperature control, and secure lids. Customers are responsible for safe handling and placement in a stationary vehicle. Pull Up Coffee is only liable if a direct platform instruction causes harm.</p>
-                            <p className="text-xs mb-3"><strong>10. Data Privacy:</strong> Location data (precise GPS coordinates) is collected solely to enable curbside handoff and merchant notification. Data is encrypted and purged upon order completion, per Privacy Act 1988 (Cth) compliance. See our Privacy Policy for full details.</p>
-                            <p className="text-xs"><strong>11. User Conduct:</strong> Users must not submit fraudulent orders, abuse platform infrastructure, or engage in unsafe driving. Violation results in immediate account termination.</p>
+                            <p className="text-xs mb-3"><strong>8. Liability & Safety Framework:</strong> Pull Up Coffee is a software platform bridge only. The cafe is responsible for safe preparation, temperature control, and secure lids. Customers are responsible for safe handling and placement in a stationary vehicle. Pull Up Coffee is only liable if a direct platform instruction causes harm.</p>
+                            <p className="text-xs mb-3"><strong>9. Data Privacy:</strong> Location data (precise GPS coordinates) is collected solely to enable curbside handoff and merchant notification. Data is encrypted and purged upon order completion, per Privacy Act 1988 (Cth) compliance. See our Privacy Policy for full details.</p>
+                            <p className="text-xs"><strong>10. User Conduct:</strong> Users must not submit fraudulent orders, abuse platform infrastructure, or engage in unsafe driving. Violation results in immediate account termination.</p>
                         </div>
                         <div className="border-t border-stone-200 pt-4">
                             <h4 className="font-bold text-stone-900 mb-2">Merchant Partner Agreement (Summary)</h4>
@@ -526,12 +525,12 @@ const LegalDocumentModal = ({ type, onClose }: any) => {
                 return (
                     <div className="space-y-4 text-sm text-stone-600 leading-relaxed">
                         <div>
-                            <h4 className="font-bold text-stone-900 mb-2">Affiliate Bounty: 25% of Platform Fee (First 30 Days)</h4>
-                            <p className="text-xs mb-3"><strong>Program Overview:</strong> Earn 25% of the platform fee for the first 30 calendar days of every cafe you onboard. The bounty is paid from our platform margin, never the cafe's share.</p>
-                            <p className="text-xs mb-3"><strong>1. Bounty Structure:</strong> Example using a $2 curbside fee: the cafe receives $1.60, the platform retains $0.40, and your bounty is $0.10 per cup (25% of the platform fee).</p>
-                            <p className="text-xs mb-3"><strong>2. Bounty Window:</strong> The bounty starts from the cafe's first successful transaction and runs for 30 calendar days. Bounties apply only when a valid affiliate link is used during signup.</p>
-                            <p className="text-xs mb-3"><strong>3. Payouts:</strong> Bounty payouts settle monthly to your connected Stripe account.</p>
-                            <p className="text-xs mb-3"><strong>4. Sustainable Growth:</strong> After the bounty window ends, Pull Up retains full platform margin to support infrastructure, support, and uptime.</p>
+                            <h4 className="font-bold text-stone-900 mb-2">Affiliate Program: 25% Commission on Platform Fee (First 30 Days)</h4>
+                            <p className="text-xs mb-3"><strong>Program Overview:</strong> Earn a 25% recurring commission on the platform fee for the first 30 calendar days of every cafe you refer. Commissions are paid from our platform margin — never the cafe's share.</p>
+                            <p className="text-xs mb-3"><strong>1. Commission Structure:</strong> Example using a $2 curbside fee: the cafe receives $1.60, the platform retains $0.40, and your commission is $0.10 per order (25% of the platform fee).</p>
+                            <p className="text-xs mb-3"><strong>2. Commission Window:</strong> Your commission period starts from the cafe's first successful transaction and runs for 30 calendar days. Commissions apply only when a valid affiliate link is used during signup.</p>
+                            <p className="text-xs mb-3"><strong>3. Payouts:</strong> Commission payouts settle monthly to your connected Stripe account.</p>
+                            <p className="text-xs mb-3"><strong>4. Sustainable Growth:</strong> After the commission window ends, Pull Up retains full platform margin to support infrastructure, support, and uptime.</p>
                             <p className="text-xs mb-3"><strong>5. IP Licensing:</strong> Affiliates receive a limited, revocable license to use Pull Up Coffee logos, trademarks, and marketing assets. Unauthorized alteration or predatory Google Ads bidding on our trademarked terms is strictly prohibited.</p>
                             <p className="text-xs mb-3"><strong>6. ACCC Disclosure Requirements:</strong> All affiliate promotions must include clear, conspicuous disclosure: "I earn a commission if you sign up via my link." Disclosure must be immediate, adjacent to the link, and written in plain English.</p>
                             <p className="text-xs mb-3"><strong>7. Spam Act 2003 Compliance:</strong> If you use email or SMS to promote the platform, you must obtain explicit prior consent from recipients and include a functional unsubscribe mechanism in every communication.</p>
@@ -699,11 +698,11 @@ const LandingPage = ({ setView, onAbout, openLegal }: any) => (
         </div>
 
         <footer className="relative z-10 bg-black/60 backdrop-blur-md border-t border-white/10 mt-auto">
-            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-7">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 mb-6 pb-6 border-b border-white/10 text-left">
+            <div className="max-w-6xl mx-auto px-5 sm:px-6 py-6 sm:py-7">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-5 sm:gap-6 mb-5 sm:mb-6 pb-5 sm:pb-6 border-b border-white/10 text-left">
                     <div>
-                        <h4 className="font-bold text-stone-300 mb-3 sm:mb-4 text-[11px] sm:text-[10px] uppercase tracking-widest">Platform</h4>
-                        <ul className="space-y-2.5 sm:space-y-3 text-xs sm:text-[10px] text-stone-400 font-medium">
+                        <h4 className="font-bold text-stone-300 mb-2.5 sm:mb-4 text-[10px] uppercase tracking-widest">Platform</h4>
+                        <ul className="space-y-1.5 sm:space-y-3 text-[11px] sm:text-[10px] text-stone-400 font-medium">
                             <li><button onClick={() => setView('discovery')} className="hover:text-orange-400 transition">Order Coffee</button></li>
                             <li><button onClick={() => setView('merchant-login')} className="hover:text-orange-400 transition">Business Login</button></li>
                             <li><button onClick={() => setView('merchant-signup')} className="hover:text-orange-400 transition">Join as Partner</button></li>
@@ -711,8 +710,8 @@ const LandingPage = ({ setView, onAbout, openLegal }: any) => (
                         </ul>
                     </div>
                     <div>
-                        <h4 className="font-bold text-stone-300 mb-3 sm:mb-4 text-[11px] sm:text-[10px] uppercase tracking-widest">Legal</h4>
-                        <ul className="space-y-2.5 sm:space-y-3 text-xs sm:text-[10px] text-stone-400 font-medium">
+                        <h4 className="font-bold text-stone-300 mb-2.5 sm:mb-4 text-[10px] uppercase tracking-widest">Legal</h4>
+                        <ul className="space-y-1.5 sm:space-y-3 text-[11px] sm:text-[10px] text-stone-400 font-medium">
                             <li><button onClick={() => openLegal('terms')} className="hover:text-orange-400 transition">Terms of Service</button></li>
                             <li><button onClick={() => openLegal('privacy')} className="hover:text-orange-400 transition">Privacy Policy</button></li>
                             <li><button onClick={() => openLegal('cookies')} className="hover:text-orange-400 transition">Cookie Policy</button></li>
@@ -720,21 +719,21 @@ const LandingPage = ({ setView, onAbout, openLegal }: any) => (
                         </ul>
                     </div>
                     <div>
-                        <h4 className="font-bold text-stone-300 mb-3 sm:mb-4 text-[11px] sm:text-[10px] uppercase tracking-widest">Support</h4>
-                        <ul className="space-y-2.5 sm:space-y-3 text-xs sm:text-[10px] text-stone-400 font-medium">
+                        <h4 className="font-bold text-stone-300 mb-2.5 sm:mb-4 text-[10px] uppercase tracking-widest">Support</h4>
+                        <ul className="space-y-1.5 sm:space-y-3 text-[11px] sm:text-[10px] text-stone-400 font-medium">
                             <li><button onClick={() => openLegal('faq')} className="hover:text-orange-400 transition">FAQ</button></li>
                             <li><button onClick={() => openLegal('contact')} className="hover:text-orange-400 transition">Contact Us</button></li>
                             <li><button onClick={() => setView('merch')} className="hover:text-orange-400 transition">Support the Founder</button></li>
                         </ul>
                     </div>
                     <div>
-                        <h4 className="font-bold text-stone-300 mb-3 sm:mb-4 text-[11px] sm:text-[10px] uppercase tracking-widest">Earn</h4>
-                        <ul className="space-y-2.5 sm:space-y-3 text-xs sm:text-[10px] font-medium">
+                        <h4 className="font-bold text-stone-300 mb-2.5 sm:mb-4 text-[10px] uppercase tracking-widest">Earn</h4>
+                        <ul className="space-y-1.5 sm:space-y-3 text-[11px] sm:text-[10px] font-medium">
                             <li><button onClick={() => openLegal('affiliate')} className="text-orange-400 hover:text-orange-300 transition font-bold">Affiliate (25% first month)</button></li>
                         </ul>
                     </div>
                 </div>
-                <div className="text-center text-[11px] sm:text-[10px] text-stone-500">
+                <div className="text-center text-[10px] text-stone-500">
                     <p>© 2026 Pull Up Coffee Pty Ltd. ABN: 17 587 686 972</p>
                 </div>
             </div>
@@ -895,7 +894,7 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
 
     return (
         <div className="min-h-screen bg-[#0f0f0f] flex flex-col lg:flex-row animate-fade-in relative text-white font-sans overflow-y-auto">
-            <button onClick={() => setView('landing')} className="absolute top-6 left-6 z-30 text-stone-400 hover:text-white font-bold flex items-center gap-2 transition px-4 py-2 hover:bg-white/10 rounded-full backdrop-blur-md text-xs uppercase tracking-widest"><Icons.X /> Back</button>
+            <button onClick={() => setView('landing')} className="absolute top-4 left-4 z-30 text-stone-400 hover:text-white font-bold flex items-center gap-2 transition px-3 py-2 hover:bg-white/10 rounded-full backdrop-blur-md text-[10px] uppercase tracking-widest"><Icons.X /> Back</button>
 
             {/* LEFT COLUMN: THE B2B PITCH */}
             <div className="hidden lg:flex w-1/2 p-16 flex-col justify-center relative bg-stone-900 border-r border-stone-800 overflow-hidden shadow-2xl">
@@ -941,33 +940,44 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
             </div>
 
             {/* RIGHT COLUMN: SIGNUP FORM */}
-            <div className="w-full lg:w-1/2 flex items-center justify-center p-8 md:p-20 relative z-10 bg-[#0f0f0f]">
+            <div className="w-full lg:w-1/2 flex items-center justify-center px-5 py-14 sm:p-8 md:p-20 relative z-10 bg-[#0f0f0f]">
                 <div className="w-full max-w-md">
-                    <div className="text-center mb-6">
+                    <div className="text-center mb-4 hidden lg:block">
                         <button onClick={() => setView('landing')} className="inline-flex items-center gap-2 text-stone-400 hover:text-white transition text-sm">
                             <Icons.X /> Back to Home
                         </button>
                     </div>
 
-                    <div className="lg:hidden text-center mb-10">
-                        <PullUpLogo className="w-20 h-20 mx-auto mb-6 shadow-[0_0_40px_rgba(249,115,22,0.4)] border-none" />
-                        <h1 className="text-3xl font-serif italic font-bold text-white mb-2">Join Pull Up</h1>
-                        <p className="text-stone-400 text-sm">Zero contracts. Zero hardware. Full margin.</p>
+                    <div className="lg:hidden text-center mb-6">
+                        <PullUpLogo className="w-16 h-16 mx-auto mb-4 shadow-[0_0_30px_rgba(249,115,22,0.3)] border-none" />
+                        <h1 className="text-2xl font-serif italic font-bold text-white mb-1">Join Pull Up</h1>
+                        <p className="text-stone-500 text-xs">Zero contracts. Zero hardware. Full margin.</p>
                     </div>
 
-                    <div className="lg:hidden bg-stone-900/70 border border-stone-700 rounded-3xl p-5 mb-8">
-                        <h3 className="text-xl font-serif italic font-bold text-white mb-3 leading-tight">Turn street parking into your most profitable table.</h3>
-                        <div className="space-y-3 text-left">
-                            <p className="text-xs text-stone-300"><span className="text-orange-400 font-bold uppercase tracking-widest text-[10px]">Accessibility</span><br />Serve parents, disabled customers, and tradies without queue friction.</p>
-                            <p className="text-xs text-stone-300"><span className="text-orange-400 font-bold uppercase tracking-widest text-[10px]">Higher Margin</span><br />Keep your menu margin and earn extra via curbside fee.</p>
-                            <p className="text-xs text-stone-300"><span className="text-orange-400 font-bold uppercase tracking-widest text-[10px]">Fast Setup</span><br />No extra hardware. Apply, verify, and go live.</p>
+                    <div className="lg:hidden rounded-2xl mb-6 overflow-hidden border border-stone-800">
+                        <div className="bg-gradient-to-br from-stone-900/80 to-stone-900/40 px-5 py-4">
+                            <p className="text-base font-serif italic font-bold text-white leading-snug">Turn street parking into your most profitable table.</p>
+                        </div>
+                        <div className="grid grid-cols-3 divide-x divide-stone-800 bg-stone-900/50">
+                            <div className="px-3 py-3 text-center">
+                                <p className="text-orange-400 font-bold text-[8px] uppercase tracking-widest mb-0.5">Inclusive</p>
+                                <p className="text-[10px] text-stone-400 leading-tight">Serve every customer, curbside.</p>
+                            </div>
+                            <div className="px-3 py-3 text-center">
+                                <p className="text-orange-400 font-bold text-[8px] uppercase tracking-widest mb-0.5">Margin</p>
+                                <p className="text-[10px] text-stone-400 leading-tight">Keep 100% of menu prices.</p>
+                            </div>
+                            <div className="px-3 py-3 text-center">
+                                <p className="text-orange-400 font-bold text-[8px] uppercase tracking-widest mb-0.5">Fast</p>
+                                <p className="text-[10px] text-stone-400 leading-tight">Apply, verify, go live.</p>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="bg-[#1a1a1a] p-10 rounded-[2.5rem] shadow-2xl w-full border border-stone-800/50 hover:border-orange-500/30 transition-colors">
-                        <h2 className="text-2xl font-serif italic font-bold mb-1 text-white">Join Pull Up</h2>
-                        <p className="text-stone-500 text-[10px] uppercase tracking-[0.2em] mb-4 font-bold">Zero contracts. Zero hardware.</p>
-                        <div className="mb-4 p-3 rounded-xl border border-orange-500/40 bg-orange-500/10">
+                    <div className="bg-[#1a1a1a] p-6 sm:p-10 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl w-full border border-stone-800/50 hover:border-orange-500/30 transition-colors">
+                        <h2 className="text-xl sm:text-2xl font-serif italic font-bold mb-1 text-white">Join Pull Up</h2>
+                        <p className="text-stone-500 text-[9px] sm:text-[10px] uppercase tracking-[0.2em] mb-3 sm:mb-4 font-bold">Zero contracts. Zero hardware.</p>
+                        <div className="mb-3 sm:mb-4 p-2.5 sm:p-3 rounded-xl border border-orange-500/40 bg-orange-500/10">
                             <p className="text-[9px] uppercase tracking-widest font-bold text-orange-300">Early Adopter Incentive</p>
                             <p className="text-xs text-stone-200 mt-1">
                                 {earlyAdopterSpotsLeft === null
@@ -978,72 +988,72 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
                             </p>
                         </div>
                         
-                        <form onSubmit={handleSignup} className="space-y-5">
-                            <div className="bg-stone-900/50 p-5 rounded-xl border border-stone-700 mb-6">
-                                <p className="text-[9px] text-stone-400 uppercase tracking-widest mb-3 font-bold">📋 Business Information</p>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <form onSubmit={handleSignup} className="space-y-4 sm:space-y-5">
+                            <div className="bg-stone-900/50 p-4 sm:p-5 rounded-xl border border-stone-700 mb-4 sm:mb-6">
+                                <p className="text-[9px] text-stone-400 uppercase tracking-widest mb-2.5 sm:mb-3 font-bold">📋 Business Information</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                                     <div>
                                         <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">Business Name</label>
-                                        <input type="text" value={bizName} onChange={e => setBizName(e.target.value)} placeholder="Your Cafe" className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
+                                        <input type="text" value={bizName} onChange={e => setBizName(e.target.value)} placeholder="Your Cafe" className="w-full p-2.5 sm:p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
                                     </div>
                                     <div>
-                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">ABN</label>
-                                        <input type="text" value={abn} onChange={e => setAbn(e.target.value)} placeholder="12 345 678 901" className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
+                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">ABN</label>
+                                        <input type="text" value={abn} onChange={e => setAbn(e.target.value)} placeholder="12 345 678 901" className="w-full p-2.5 sm:p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
                                     </div>
                                     <div className="md:col-span-2">
-                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">Store Address</label>
-                                        <input type="text" value={address} onChange={e => setAddress(e.target.value)} placeholder="123 Main St, Sydney NSW" className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
+                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">Store Address</label>
+                                        <input type="text" value={address} onChange={e => setAddress(e.target.value)} placeholder="123 Main St, Sydney NSW" className="w-full p-2.5 sm:p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
                                     </div>
                                     <div>
-                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">Phone Number</label>
-                                        <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="(02) XXXX XXXX" className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
+                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">Phone Number</label>
+                                        <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="(02) XXXX XXXX" className="w-full p-2.5 sm:p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
                                     </div>
                                     <div>
-                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">Billing Email (opt)</label>
-                                        <input type="email" value={billingEmail} onChange={e => setBillingEmail(e.target.value)} placeholder="billing@..." className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" />
+                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">Billing Email (opt)</label>
+                                        <input type="email" value={billingEmail} onChange={e => setBillingEmail(e.target.value)} placeholder="billing@..." className="w-full p-2.5 sm:p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" />
                                     </div>
                                 </div>
-                                <div className="mt-4">
-                                    <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">Google Business URL (optional - helps verification)</label>
-                                    <input type="url" value={googleBusinessUrl} onChange={e => setGoogleBusinessUrl(e.target.value)} placeholder="https://goo.gl/maps/..." className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" />
+                                <div className="mt-3 sm:mt-4">
+                                    <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">Google Business URL (optional)</label>
+                                    <input type="url" value={googleBusinessUrl} onChange={e => setGoogleBusinessUrl(e.target.value)} placeholder="https://goo.gl/maps/..." className="w-full p-2.5 sm:p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" />
                                 </div>
-                                <div className="mt-4">
-                                    <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">About Your Business</label>
-                                    <textarea value={businessDescription} onChange={e => setBusinessDescription(e.target.value)} placeholder="What do you sell? Expected order volume? Peak hours?" rows={3} className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm resize-none" required />
-                                    <p className="text-[8px] text-stone-500 mt-2 italic">✓ Approval within 1-3 business days</p>
+                                <div className="mt-3 sm:mt-4">
+                                    <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">About Your Business</label>
+                                    <textarea value={businessDescription} onChange={e => setBusinessDescription(e.target.value)} placeholder="What do you sell? Expected order volume? Peak hours?" rows={2} className="w-full p-2.5 sm:p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm resize-none" required />
+                                    <p className="text-[8px] text-stone-500 mt-1 italic">✓ Approval within 1-3 business days</p>
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-2">Email Address</label>
-                                <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@cafe.com" className="w-full p-4 bg-[#0f0f0f] border border-stone-800 rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium" required />
+                                <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">Email Address</label>
+                                <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@cafe.com" className="w-full p-3 sm:p-4 bg-[#0f0f0f] border border-stone-800 rounded-xl sm:rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium" required />
                             </div>
                             <div>
-                                <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-2">Password</label>
-                                <input type="password" value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••" minLength={6} className="w-full p-4 bg-[#0f0f0f] border border-stone-800 rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium" required />
+                                <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">Password</label>
+                                <input type="password" value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••" minLength={6} className="w-full p-3 sm:p-4 bg-[#0f0f0f] border border-stone-800 rounded-xl sm:rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium" required />
                             </div>
                             <div>
-                                <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-2">Confirm Password</label>
-                                <input type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} placeholder="••••••••" minLength={6} className="w-full p-4 bg-[#0f0f0f] border border-stone-800 rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium" required />
+                                <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">Confirm Password</label>
+                                <input type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} placeholder="••••••••" minLength={6} className="w-full p-3 sm:p-4 bg-[#0f0f0f] border border-stone-800 rounded-xl sm:rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium" required />
                             </div>
-                            <button type="submit" disabled={loadingAuth} className="w-full bg-orange-600 text-white py-5 rounded-2xl font-bold mt-6 hover:bg-orange-500 disabled:opacity-50 transition-all active:scale-95 uppercase tracking-widest text-sm shadow-[0_0_12px_rgba(249,115,22,0.25)]">
+                            <button type="submit" disabled={loadingAuth} className="w-full bg-orange-600 text-white py-4 sm:py-5 rounded-2xl font-bold mt-4 sm:mt-6 hover:bg-orange-500 disabled:opacity-50 transition-all active:scale-95 uppercase tracking-widest text-sm shadow-[0_0_12px_rgba(249,115,22,0.25)]">
                                 {loadingAuth ? 'Processing...' : 'Submit Application'}
                             </button>
                         </form>
 
-                        <div className="mt-8 pt-6 border-t border-stone-800 text-center">
-                            <p className="text-stone-500 text-[10px] uppercase tracking-widest mb-4">Already have an account?</p>
+                        <div className="mt-6 sm:mt-8 pt-5 sm:pt-6 border-t border-stone-800 text-center">
+                            <p className="text-stone-500 text-[10px] uppercase tracking-widest mb-3">Already have an account?</p>
                             <button onClick={() => setView('merchant-login')} className="text-orange-500 font-bold text-sm uppercase tracking-widest hover:text-orange-400 transition">
                                 Log in here
                             </button>
                         </div>
 
-                        <div className="mt-8 pt-6 border-t border-stone-800 text-center">
-                            <button onClick={() => setShowExploreMore((prev: boolean) => !prev)} className="w-full flex items-center justify-between text-stone-300 text-[10px] uppercase tracking-widest font-bold bg-[#111111] border border-stone-800 rounded-2xl px-4 py-3 hover:border-stone-700 transition">
+                        <div className="mt-5 sm:mt-8 pt-5 sm:pt-6 border-t border-stone-800 text-center">
+                            <button onClick={() => setShowExploreMore((prev: boolean) => !prev)} className="w-full flex items-center justify-between text-stone-300 text-[10px] uppercase tracking-widest font-bold bg-[#111111] border border-stone-800 rounded-xl sm:rounded-2xl px-4 py-2.5 sm:py-3 hover:border-stone-700 transition">
                                 <span>Explore More</span>
                                 <span className={`transition-transform ${showExploreMore ? 'rotate-90' : ''}`}><Icons.ChevronRight /></span>
                             </button>
                             {showExploreMore && (
-                                <div className="bg-[#111111] border border-stone-800 rounded-2xl p-4 mt-3 mb-3 space-y-2 text-left">
+                                <div className="bg-[#111111] border border-stone-800 rounded-xl sm:rounded-2xl p-3 sm:p-4 mt-2 mb-2 space-y-2 text-left">
                                     <p className="text-[10px] uppercase tracking-widest text-stone-500 font-bold">Need Help Onboarding?</p>
                                     {ONBOARDING_VIDEOS.map((video) => (
                                         <a key={video.url} href={video.url} target="_blank" rel="noreferrer" className="w-full flex items-center justify-between bg-stone-900 border border-stone-700 hover:border-orange-500 rounded-xl p-3 transition">
@@ -1053,9 +1063,10 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
                                     ))}
                                 </div>
                             )}
-                            <div className="space-y-2">
-                                <button onClick={() => openLegal('affiliate')} className="block w-full text-orange-400 hover:text-orange-300 font-bold text-[10px] uppercase tracking-widest transition">💰 Affiliate Program (25% first month)</button>
-                                <button onClick={() => openLegal('terms')} className="block w-full text-stone-500 hover:text-stone-300 font-medium text-[9px] uppercase tracking-widest transition">Legal Terms</button>
+                            <div className="flex items-center justify-center gap-3 mt-2">
+                                <button onClick={() => openLegal('affiliate')} className="text-orange-400 hover:text-orange-300 font-bold text-[10px] uppercase tracking-widest transition">Affiliate Program</button>
+                                <span className="text-stone-700">·</span>
+                                <button onClick={() => openLegal('terms')} className="text-stone-500 hover:text-stone-300 font-medium text-[10px] uppercase tracking-widest transition">Legal</button>
                             </div>
                         </div>
                     </div>
@@ -1569,7 +1580,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                 { id: 'qr', keywords: ['qr', 'poster', 'print', 'scan', 'code'], text: 'Fast answer: go to Account tab → Generate QR Poster. It creates a printable A4 poster with your cafe QR code, business name, and "Scan to Order" branding. Place it near your curbside area.' },
                 { id: 'hours', keywords: ['hours', 'schedule', 'open time', 'close time', 'operating', 'window', 'when'], text: 'Fast answer: go to Operations → Operating Window. Set your open/close times. You must also be toggled ONLINE for customers to see you. The schedule is a guide — the online toggle is the master control.' },
                 { id: 'logo', keywords: ['logo', 'branding', 'brand', 'image', 'avatar', 'profile picture'], text: 'Fast answer: go to Account tab → Upload Logo. Use a square image for best results. Your logo appears in Discovery, menu view, and order notifications.' },
-                { id: 'affiliate', keywords: ['affiliate', 'referral', 'commission', 'bounty', 'refer', 'earn'], text: 'Fast answer: Pull Up offers a 25% affiliate bounty on platform fee for the first 30 days of every cafe you onboard. Email hello@pullupcoffee.com.au with "Affiliate Interest" to receive your unique link and marketing assets.' },
+                { id: 'affiliate', keywords: ['affiliate', 'referral', 'commission', 'refer', 'earn'], text: 'Fast answer: Pull Up offers a 25% affiliate commission on the platform fee for the first 30 days of every cafe you refer. Email hello@pullupcoffee.com.au with "Affiliate Interest" to receive your unique link and marketing assets.' },
                 { id: 'security', keywords: ['security', 'safe', 'data', 'privacy', 'personal info', 'card details', 'encryption'], text: 'Fast answer: all payments are processed through Stripe with 256-bit encryption. We never store card numbers. Customer data is encrypted and GPS data is purged after order completion. Full Privacy Act 1988 compliance.' },
                 { id: 'early-adopter', keywords: ['early adopter', 'founders', 'first 33', 'special', 'benefit', 'bonus'], text: 'Fast answer: the first 33 cafe partners are "Early Adopters" — you keep 100% of your menu prices + 80% of the curbside fee with zero platform commission on menu items. This is locked in permanently for qualifying accounts.' },
                 { id: 'merch', keywords: ['merch', 'merchandise', 'hat', 'cap', 'founders', 'shop', 'buy'], text: 'Fast answer: visit the Merch Store from the main menu to grab limited-edition Pull Up Founders gear. Currently available: embroidered caps with AU shipping.' },
