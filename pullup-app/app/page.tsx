@@ -2092,8 +2092,27 @@ const Discovery = ({ setView, onSelectCafe, cafes }: any) => {
     const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [locationStatus, setLocationStatus] = useState<'idle' | 'requesting' | 'granted' | 'denied' | 'error'>('idle');
     const [locationError, setLocationError] = useState('');
+    const [detectedAreaLabel, setDetectedAreaLabel] = useState('');
+    const [hasManualRadius, setHasManualRadius] = useState(false);
 
-    const requestLocation = () => {
+    const resolveAreaFromCoords = async (lat: number, lng: number) => {
+        try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&addressdetails=1`);
+            if (!res.ok) return;
+            const payload = await res.json();
+            const address = payload?.address || {};
+            const postcode = address.postcode || '';
+            const suburb = address.suburb || address.city || address.town || address.village || '';
+            const composed = [suburb, postcode].filter(Boolean).join(' ').trim();
+            if (!composed) return;
+            setDetectedAreaLabel(composed);
+            setAreaTerm(composed);
+        } catch {
+            // best effort only
+        }
+    };
+
+    const requestLocation = (forceFresh = false) => {
         if (typeof window === 'undefined' || !navigator.geolocation) {
             setLocationStatus('error');
             setLocationError('Location is not supported on this device/browser.');
@@ -2103,8 +2122,12 @@ const Discovery = ({ setView, onSelectCafe, cafes }: any) => {
         setLocationError('');
         navigator.geolocation.getCurrentPosition(
             (position) => {
-                setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                setUserLocation({ lat, lng });
                 setLocationStatus('granted');
+                setHasManualRadius(false);
+                void resolveAreaFromCoords(lat, lng);
             },
             (error) => {
                 setUserLocation(null);
@@ -2116,13 +2139,58 @@ const Discovery = ({ setView, onSelectCafe, cafes }: any) => {
                 setLocationStatus('error');
                 setLocationError('Unable to fetch your location right now.');
             },
-            { enableHighAccuracy: true, timeout: 12000, maximumAge: 300000 },
+            { enableHighAccuracy: true, timeout: 18000, maximumAge: forceFresh ? 0 : 300000 },
         );
     };
 
     useEffect(() => {
         requestLocation();
     }, []);
+
+    const distanceCatalog = cafes
+        .filter((c: any) => c.isApproved)
+        .map((c: any) => {
+            const cafeLat = Number(c.latitude ?? c.lat);
+            const cafeLng = Number(c.longitude ?? c.lng);
+            const hasCafeCoords = Number.isFinite(cafeLat) && Number.isFinite(cafeLng);
+            const distanceKm = userLocation && hasCafeCoords
+                ? haversineDistanceMeters(userLocation.lat, userLocation.lng, cafeLat, cafeLng) / 1000
+                : null;
+
+            return { ...c, distanceKm };
+        })
+        .filter((c: any) => typeof c.distanceKm === 'number')
+        .sort((a: any, b: any) => (a.distanceKm as number) - (b.distanceKm as number));
+
+    useEffect(() => {
+        if (locationStatus !== 'granted' || hasManualRadius) return;
+
+        const distances = distanceCatalog.map((c: any) => c.distanceKm as number);
+        if (!distances.length) return;
+
+        const DEFAULT_RADIUS_KM = 15;
+        const MIN_RESULTS_TARGET = 4;
+        const MAX_RESULTS_TARGET = 8;
+        const MIN_RADIUS_WHEN_DENSE = 5;
+
+        const closestDistance = distances[0];
+        let suggestedRadius = DEFAULT_RADIUS_KM;
+
+        if (closestDistance > suggestedRadius) {
+            suggestedRadius = Math.ceil(closestDistance);
+        }
+
+        const countWithinSuggested = distances.filter((distance: number) => distance <= suggestedRadius).length;
+        if (countWithinSuggested > MAX_RESULTS_TARGET) {
+            const minDistanceForTargetCount = distances[Math.min(MIN_RESULTS_TARGET - 1, distances.length - 1)];
+            suggestedRadius = Math.max(MIN_RADIUS_WHEN_DENSE, Math.ceil(minDistanceForTargetCount));
+        }
+
+        suggestedRadius = Math.max(Math.ceil(closestDistance), suggestedRadius);
+        suggestedRadius = Math.min(50, Math.max(1, suggestedRadius));
+
+        setSearchRadius((current) => (current === suggestedRadius ? current : suggestedRadius));
+    }, [locationStatus, distanceCatalog, hasManualRadius]);
 
     const normalizedCafeTerm = searchTerm.trim().toLowerCase();
     const normalizedAreaTerm = areaTerm.trim().toLowerCase();
@@ -2180,13 +2248,14 @@ const Discovery = ({ setView, onSelectCafe, cafes }: any) => {
                     <div className="bg-white p-4 rounded-2xl shadow-sm border border-stone-100 mb-5 max-w-sm mx-auto text-left">
                         <div className="flex items-center justify-between gap-3">
                             <p className="text-[10px] uppercase tracking-widest font-bold text-stone-500">Live Location</p>
-                            <button onClick={requestLocation} className="text-[10px] uppercase tracking-widest font-bold bg-stone-900 text-white px-3 py-2 rounded-full hover:bg-stone-800 transition">
+                            <button onClick={() => requestLocation(true)} className="text-[10px] uppercase tracking-widest font-bold bg-stone-900 text-white px-3 py-2 rounded-full hover:bg-stone-800 transition">
                                 {locationStatus === 'requesting' ? 'Locating…' : (locationStatus === 'granted' ? 'Refresh' : 'Enable')}
                             </button>
                         </div>
                         {locationStatus === 'granted' && userLocation && (
                             <p className="text-xs text-stone-600 mt-2">Using your location: {userLocation.lat.toFixed(3)}, {userLocation.lng.toFixed(3)}</p>
                         )}
+                        {detectedAreaLabel && <p className="text-xs text-stone-500 mt-1">Detected area: {detectedAreaLabel}</p>}
                         {(locationStatus === 'denied' || locationStatus === 'error') && (
                             <p className="text-xs text-amber-600 mt-2">{locationError}</p>
                         )}
@@ -2206,7 +2275,17 @@ const Discovery = ({ setView, onSelectCafe, cafes }: any) => {
                             <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 flex items-center gap-2"><Icons.Sliders /> Search Radius</label>
                             <span className="font-bold text-orange-500 text-sm">{searchRadius} km</span>
                         </div>
-                        <input type="range" min="1" max="50" value={searchRadius} onChange={(e: any) => setSearchRadius(Number(e.target.value))} className="w-full accent-orange-500 h-2 bg-stone-100 rounded-lg appearance-none cursor-pointer" />
+                        <input
+                            type="range"
+                            min="1"
+                            max="50"
+                            value={searchRadius}
+                            onChange={(e: any) => {
+                                setHasManualRadius(true);
+                                setSearchRadius(Number(e.target.value));
+                            }}
+                            className="w-full accent-orange-500 h-2 bg-stone-100 rounded-lg appearance-none cursor-pointer"
+                        />
                     </div>
                     
                     <div className="space-y-4 w-full">
