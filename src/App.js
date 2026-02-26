@@ -21,7 +21,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-const CONTACT_EMAIL = "hello@pullupcoffee.com";
 
 // --- GLOBAL STYLES ---
 const GlobalStyles = () => (
@@ -227,8 +226,6 @@ const MerchantVideoModal = ({ onClose }) => (
 const ProductModal = ({ item, onClose, onAdd }) => {
     const [size, setSize] = useState('Reg');
     const [milk, setMilk] = useState('Full Cream');
-    const [sugar, setSugar] = useState('0');
-    const [temp, setTemp] = useState('Hot');
     const [notes, setNotes] = useState('');
 
     const getAdjustedPrice = () => {
@@ -595,7 +592,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut }) => {
                                     <div key={m.id} className="flex justify-between items-center p-5 bg-stone-50 rounded-3xl border border-stone-100">
                                         <div className="flex items-center gap-4">
                                             <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-stone-200 shrink-0 flex items-center justify-center text-stone-300">
-                                                {m.img ? <img src={m.img} className="w-full h-full object-cover" /> : <Icons.Coffee />}
+                                                {m.img ? <img src={m.img} alt={m.name || 'Menu item'} className="w-full h-full object-cover" /> : <Icons.Coffee />}
                                             </div>
                                             <div><p className="font-bold text-brand-dark">{m.name}</p><p className="text-[10px] text-stone-400 uppercase tracking-widest font-bold mt-1">${m.price.toFixed(2)}</p></div>
                                         </div>
@@ -608,7 +605,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut }) => {
                                 <div className="flex items-center gap-4">
                                     <input type="file" accept="image/*" className="hidden" ref={itemImageInputRef} onChange={handleItemImageUpload} />
                                     <button onClick={() => itemImageInputRef.current?.click()} className="w-20 h-20 rounded-2xl border-2 border-dashed border-stone-300 flex items-center justify-center text-stone-400 hover:border-brand-orange hover:text-brand-orange transition shrink-0 overflow-hidden bg-stone-50">
-                                        {newItem.img ? <img src={newItem.img} className="w-full h-full object-cover" /> : <Icons.Upload />}
+                                        {newItem.img ? <img src={newItem.img} alt="New menu item preview" className="w-full h-full object-cover" /> : <Icons.Upload />}
                                     </button>
                                     <div className="flex-1 space-y-3">
                                         <input value={newItem.name} onChange={(e) => setNewItem({...newItem, name:e.target.value})} type="text" placeholder="Coffee Name" className="w-full bg-stone-50 p-4 rounded-2xl outline-none focus:bg-white focus:ring-1 ring-brand-orange/30 transition-all font-medium text-sm" />
@@ -733,7 +730,7 @@ const Discovery = ({ setView, onSelectCafe, userLoc, detectLoc, cafes }) => {
                     cafes.map(c => (
                         <button key={c.id} onClick={() => onSelectCafe(c)} className="w-full p-6 sm:p-10 bg-white rounded-[3.5rem] border border-stone-100 text-left hover:border-brand-orange transition-all shadow-premium group relative overflow-hidden flex items-center gap-6">
                             <div className="w-20 h-20 rounded-full bg-stone-100 border border-stone-200 overflow-hidden shrink-0 flex items-center justify-center text-stone-400">
-                                {c.logo ? <img src={c.logo} className="w-full h-full object-cover" /> : <Icons.Store />}
+                                {c.logo ? <img src={c.logo} alt={`${c.businessName || 'Cafe'} logo`} className="w-full h-full object-cover" /> : <Icons.Store />}
                             </div>
                             <div className="flex-1">
                                 <h3 className="font-bold text-2xl text-brand-dark tracking-tight leading-none">{c.businessName}</h3>
@@ -776,7 +773,7 @@ const CafeMenu = ({ setView, selectedCafe, cart, setCart, db }) => {
                     {shopMenu.map(item => (
                         <div key={item.name} onClick={() => setActiveItem(item)} className="bg-white p-4 sm:p-6 rounded-[2rem] border border-stone-100 shadow-sm flex items-center gap-5 group hover:border-brand-orange transition-all cursor-pointer">
                             <div className="w-20 h-20 rounded-xl overflow-hidden bg-stone-50 border border-stone-200 shrink-0 flex items-center justify-center text-stone-300">
-                                {item.img ? <img src={item.img} className="w-full h-full object-cover" /> : <Icons.Coffee />}
+                                {item.img ? <img src={item.img} alt={item.name || 'Coffee item'} className="w-full h-full object-cover" /> : <Icons.Coffee />}
                             </div>
                             <div className="flex-1">
                                 <h4 className="font-bold text-xl text-brand-dark leading-tight tracking-tight">{item.name}</h4>

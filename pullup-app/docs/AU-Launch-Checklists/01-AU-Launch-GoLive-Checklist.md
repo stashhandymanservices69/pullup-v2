@@ -74,3 +74,10 @@ Why: using both Squarespace forwarding and Vercel redirects can cause double-red
 - [ ] Keep only records Vercel requests for the affected domain
 - [ ] In Vercel, click **Refresh** again
 - [ ] Wait for propagation and retest
+
+### Step 7 — Vercel deployment blocker (CI lint warnings)
+- [x] Run local build and capture warnings from `src/App.js`
+- [x] Remove unused variables (`CONTACT_EMAIL`, `sugar`, `setSugar`, `temp`, `setTemp`)
+- [x] Add missing `alt` text to all menu/logo image tags flagged by lint
+- [x] Commit and push lint fixes to `master`
+- [ ] Confirm latest Vercel deployment for `master` is **Ready**
