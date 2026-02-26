@@ -1,0 +1,40 @@
+Use this as my technical co-pilot for Pull Up Coffee. Focus on implementation-ready outputs only.
+
+Context:
+- Next.js app router project with Firebase Auth/Firestore, Stripe Checkout/Connect, Twilio SMS, and admin API token layer.
+- Goal: secure, scalable, production-grade launch.
+- Constraints: no secret exposure, least-privilege access, strong validation, clear merchant UX.
+
+Deliverables I want from you now:
+1) Security hardening checklist mapped to code changes
+- app-level, API-level, infra-level
+- include exact headers, rate-limit strategy, App Check, Firestore rules, abuse prevention
+
+2) Scalability plan for 100k users / 5k stores peak window
+- bottlenecks and mitigations
+- queueing strategy, retries, idempotency keys, webhook safety
+
+3) Stripe + Printful automation roadmap
+- manual MVP now, webhook automation later
+- event matrix: payment_succeeded, fulfillment_created, tracking_updated, refund
+
+4) Merchant operations UX improvements
+- reduce confusion in dashboard
+- payout clarity panel, order state machine, exception handling
+
+5) SOP expansion pack
+- add role-based SOPs: Founder, Ops, Support, Merchant
+- include triggers, expected outcomes, rollback actions
+
+Format required:
+- Return as phased execution plan: Phase 1 (this week), Phase 2 (next week), Phase 3 (month)
+- For each phase provide:
+  - exact code tasks
+  - test plan
+  - risk level
+  - success criteria
+
+Important:
+- Do not suggest exposing secrets in source code.
+- Prefer secure defaults and minimal public attack surface.
+- Assume Australian compliance baseline (ACL + Privacy Act alignment).
