@@ -658,7 +658,7 @@ const LegalDocumentModal = ({ type, onClose }: any) => {
 // --- VIEWS ---
 
 const LandingPage = ({ setView, onAbout, openLegal }: any) => (
-    <div className="flex flex-col min-h-screen bg-stone-900 text-white animate-fade-in relative overflow-x-hidden overflow-y-hidden font-sans">
+    <div className="flex flex-col min-h-screen bg-stone-900 text-white animate-fade-in relative overflow-x-hidden font-sans">
         {/* ELEGANT TOP NAVIGATION */}
         <div className="absolute top-4 right-4 left-4 sm:left-auto sm:top-6 sm:right-6 z-50 flex justify-end gap-3">
             <button 
@@ -1067,14 +1067,17 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
 
 const SupportFounder = ({ setView }: any) => {
     const [loading, setLoading] = useState(false);
+    const [vipAmount, setVipAmount] = useState('');
 
-    const handleSupport = async (tier: string) => {
+    const handleSupport = async (tier: string, customAmount?: number) => {
         setLoading(true);
         try {
+            const payload: any = { tier };
+            if (customAmount) payload.amount = customAmount;
             const res = await fetch('/api/stripe/merch', { 
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tier })
+                body: JSON.stringify(payload)
             });
             const data = await res.json();
             if (data.url) window.location.href = data.url;
@@ -1084,6 +1087,13 @@ const SupportFounder = ({ setView }: any) => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleVipSupport = () => {
+        const amt = parseFloat(vipAmount);
+        if (!amt || amt < 5) { alert('Minimum VIP amount is $5 AUD'); return; }
+        if (amt > 10000) { alert('Maximum amount is $10,000 AUD'); return; }
+        handleSupport('vip', Math.round(amt * 100));
     };
 
     return (
@@ -1102,7 +1112,7 @@ const SupportFounder = ({ setView }: any) => {
                     <p className="text-stone-500 text-lg leading-relaxed max-w-lg mx-auto">Pull Up Coffee is bootstrapped by a solo founder. Every contribution goes directly toward platform development, hosting, and keeping things running for partner cafes.</p>
                 </div>
 
-                <div className="w-full max-w-3xl grid md:grid-cols-3 gap-6">
+                <div className="w-full max-w-5xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     {/* Coffee Tier */}
                     <div className="bg-white rounded-[2rem] border border-stone-200 shadow-sm p-8 flex flex-col items-center text-center hover:border-orange-300 hover:shadow-md transition-all">
                         <div className="text-4xl mb-4">☕</div>
@@ -1112,45 +1122,65 @@ const SupportFounder = ({ setView }: any) => {
                             <span className="text-4xl font-bold text-stone-900">$4.50</span>
                             <span className="text-stone-400 text-[10px] font-bold uppercase tracking-widest mb-1">AUD</span>
                         </div>
-                        <button onClick={() => handleSupport('coffee')} disabled={loading} className="w-full bg-orange-600 text-white py-4 rounded-2xl font-bold uppercase tracking-widest text-xs hover:bg-orange-500 transition disabled:opacity-50 active:scale-95 shadow-lg">
+                        <button onClick={() => handleSupport('coffee')} disabled={loading} className="w-full bg-orange-600 text-white py-4 rounded-2xl font-bold uppercase tracking-widest text-xs hover:bg-orange-500 transition disabled:opacity-50 active:scale-95 shadow-lg mt-auto">
                             {loading ? 'Loading...' : 'Buy a Coffee'}
                         </button>
                     </div>
 
-                    {/* Supporter Tier */}
+                    {/* Legend Tier (Most Popular) */}
                     <div className="bg-white rounded-[2rem] border-2 border-orange-400 shadow-lg p-8 flex flex-col items-center text-center relative overflow-hidden">
                         <div className="absolute top-0 left-0 right-0 bg-orange-500 text-white text-[9px] font-bold uppercase tracking-widest py-1.5 text-center">Most Popular</div>
-                        <div className="text-4xl mb-4 mt-4">🧡</div>
-                        <h3 className="font-serif italic font-bold text-2xl text-stone-900 mb-2">Big Supporter</h3>
+                        <div className="text-4xl mb-4 mt-4">🤙</div>
+                        <h3 className="font-serif italic font-bold text-2xl text-stone-900 mb-2">Legend</h3>
                         <p className="text-stone-500 text-sm mb-6 leading-relaxed">Fuel a week of late-night coding and feature drops.</p>
                         <div className="flex items-end gap-2 mb-6">
                             <span className="text-4xl font-bold text-stone-900">$10</span>
                             <span className="text-stone-400 text-[10px] font-bold uppercase tracking-widest mb-1">AUD</span>
                         </div>
-                        <button onClick={() => handleSupport('supporter')} disabled={loading} className="w-full bg-stone-900 text-white py-4 rounded-2xl font-bold uppercase tracking-widest text-xs hover:bg-stone-800 transition disabled:opacity-50 active:scale-95 shadow-lg">
+                        <button onClick={() => handleSupport('supporter')} disabled={loading} className="w-full bg-stone-900 text-white py-4 rounded-2xl font-bold uppercase tracking-widest text-xs hover:bg-stone-800 transition disabled:opacity-50 active:scale-95 shadow-lg mt-auto">
                             {loading ? 'Loading...' : 'Support Now'}
+                        </button>
+                    </div>
+
+                    {/* Big Supporter VIP Tier */}
+                    <div className="bg-white rounded-[2rem] border border-stone-200 shadow-sm p-8 flex flex-col items-center text-center hover:border-red-300 hover:shadow-md transition-all relative overflow-hidden">
+                        <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-red-500 to-orange-500 text-white text-[9px] font-bold uppercase tracking-widest py-1.5 text-center">VIP — First 100</div>
+                        <div className="text-4xl mb-4 mt-4">❤️</div>
+                        <h3 className="font-serif italic font-bold text-2xl text-stone-900 mb-2">Big Supporter VIP</h3>
+                        <p className="text-stone-500 text-sm mb-4 leading-relaxed">Top 100 supporters in our first year join the official VIP list — exclusive event invites, free merch drops & early access to new features.</p>
+                        <div className="w-full mb-4">
+                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2 block">Your Amount</label>
+                            <div className="flex items-center gap-2">
+                                <span className="text-2xl font-bold text-stone-900">$</span>
+                                <input type="number" min="5" max="10000" step="0.50" placeholder="25" value={vipAmount} onChange={e => setVipAmount(e.target.value)} className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl text-center text-2xl font-bold text-stone-900 outline-none focus:border-orange-400 transition" />
+                                <span className="text-stone-400 text-[10px] font-bold uppercase tracking-widest">AUD</span>
+                            </div>
+                            <p className="text-stone-400 text-[10px] mt-1.5">Min $5 — choose what feels right</p>
+                        </div>
+                        <button onClick={handleVipSupport} disabled={loading || !vipAmount} className="w-full bg-gradient-to-r from-red-600 to-orange-600 text-white py-4 rounded-2xl font-bold uppercase tracking-widest text-xs hover:from-red-500 hover:to-orange-500 transition disabled:opacity-50 active:scale-95 shadow-lg mt-auto">
+                            {loading ? 'Loading...' : 'Join VIP'}
                         </button>
                     </div>
 
                     {/* Founders Hat Tier */}
                     <div className="bg-white rounded-[2rem] border border-stone-200 shadow-sm p-8 flex flex-col items-center text-center hover:border-orange-300 hover:shadow-md transition-all">
-                        <div className="text-4xl mb-4">🧢</div>
+                        <img src="/merch/hat.jpg" alt="Pull Up Coffee Founders Cap" className="w-28 h-28 object-contain mb-4 rounded-xl" />
                         <h3 className="font-serif italic font-bold text-2xl text-stone-900 mb-2">Founders Cap</h3>
                         <p className="text-stone-500 text-sm mb-6 leading-relaxed">Limited edition dad hat with embroidered Pull Up logo. Ships AU-wide.</p>
                         <div className="flex items-end gap-2 mb-6">
                             <span className="text-4xl font-bold text-stone-900">$45</span>
                             <span className="text-stone-400 text-[10px] font-bold uppercase tracking-widest mb-1">AUD + $10 Ship</span>
                         </div>
-                        <button onClick={() => handleSupport('hat')} disabled={loading} className="w-full bg-stone-900 text-white py-4 rounded-2xl font-bold uppercase tracking-widest text-xs hover:bg-stone-800 transition disabled:opacity-50 active:scale-95 shadow-lg">
+                        <button onClick={() => handleSupport('hat')} disabled={loading} className="w-full bg-stone-900 text-white py-4 rounded-2xl font-bold uppercase tracking-widest text-xs hover:bg-stone-800 transition disabled:opacity-50 active:scale-95 shadow-lg mt-auto">
                             {loading ? 'Loading...' : 'Get the Cap'}
                         </button>
                     </div>
                 </div>
 
-                <div className="mt-10 p-5 bg-stone-100 rounded-2xl flex items-start gap-4 border border-stone-200 max-w-2xl w-full">
+                <div className="mt-10 p-5 bg-stone-100 rounded-2xl flex items-start gap-4 border border-stone-200 max-w-3xl w-full">
                     <div className="text-stone-400 mt-0.5"><Icons.Info /></div>
                     <p className="text-xs text-stone-500 leading-relaxed font-medium">
-                        <strong>100% Transparent:</strong> Every dollar goes to platform hosting, development tools, and keeping Pull Up free for partner cafes. No investors, no VC — just coffee and code.
+                        <strong>100% Transparent:</strong> Every dollar goes to platform hosting, development tools, advertising, team & staff wages, and keeping Pull Up free for partner cafes. No investors, no VC — just coffee, code, and a commitment to building something real for the community.
                     </p>
                 </div>
             </div>

@@ -18,17 +18,26 @@ export async function POST(req: Request) {
 
     const origin = req.headers.get('origin') as string;
 
-    let body: { tier?: string } = {};
+    let body: { tier?: string; amount?: number } = {};
     try { body = await req.json(); } catch { /* default to hat */ }
     const tier = body.tier || 'hat';
 
     const tierConfig: Record<string, { name: string; description: string; amount: number; needsShipping: boolean }> = {
       coffee: { name: 'Buy the Founder a Coffee', description: 'Support Pull Up Coffee development — one flat white at a time.', amount: 450, needsShipping: false },
-      supporter: { name: 'Big Supporter — Pull Up Coffee', description: 'Fuel a week of late-night coding and feature drops for Pull Up Coffee.', amount: 1000, needsShipping: false },
+      supporter: { name: 'Legend — Pull Up Coffee', description: 'Fuel a week of late-night coding and feature drops for Pull Up Coffee.', amount: 1000, needsShipping: false },
+      vip: { name: 'Big Supporter VIP — Pull Up Coffee', description: 'Top 100 first-year supporters join the official VIP list with exclusive perks, event invites, and free merch drops.', amount: 2500, needsShipping: false },
       hat: { name: 'Founders Cap — Pull Up Coffee', description: 'Limited edition dad hat. 100% cotton twill, unstructured low-profile crown, adjustable buckle strap. Made to order with premium embroidery.', amount: 4500, needsShipping: true },
     };
 
     const config = tierConfig[tier] || tierConfig.hat;
+
+    // VIP tier allows custom amount (minimum 500 cents = $5 AUD)
+    if (tier === 'vip' && body.amount && typeof body.amount === 'number') {
+      const customAmount = Math.round(body.amount);
+      if (customAmount >= 500 && customAmount <= 1000000) {
+        config.amount = customAmount;
+      }
+    }
 
     const sessionParams: any = {
       payment_method_types: ['card'],
