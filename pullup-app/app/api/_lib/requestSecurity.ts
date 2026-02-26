@@ -7,25 +7,52 @@ type RateEntry = {
 
 const rateLimitMap = new Map<string, RateEntry>();
 
-const getAllowedOrigins = () => {
+const normalizeHost = (value: string) => value.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+
+const getInferredOrigins = (req: Request) => {
+  const inferred = new Set<string>();
+
+  const vercelUrl = process.env.VERCEL_URL?.trim();
+  if (vercelUrl) {
+    inferred.add(`https://${normalizeHost(vercelUrl)}`);
+  }
+
+  const forwardedHost = req.headers.get('x-forwarded-host')?.trim();
+  const host = req.headers.get('host')?.trim();
+  const activeHost = forwardedHost || host;
+  const forwardedProto = req.headers.get('x-forwarded-proto')?.trim() || 'https';
+
+  if (activeHost) {
+    inferred.add(`${forwardedProto}://${normalizeHost(activeHost)}`);
+    inferred.add(`https://${normalizeHost(activeHost)}`);
+  }
+
+  return Array.from(inferred);
+};
+
+const getAllowedOrigins = (req: Request) => {
   const configured = process.env.ALLOWED_ORIGINS;
+  const inferredOrigins = getInferredOrigins(req);
+
   if (configured && configured.trim()) {
-    return configured
+    const configuredOrigins = configured
       .split(',')
       .map((origin) => origin.trim())
       .filter(Boolean);
+
+    return Array.from(new Set([...configuredOrigins, ...inferredOrigins]));
   }
 
   if (process.env.NODE_ENV === 'production') {
-    return [];
+    return inferredOrigins;
   }
 
-  return ['http://localhost:3000', 'http://127.0.0.1:3000'];
+  return Array.from(new Set(['http://localhost:3000', 'http://127.0.0.1:3000', ...inferredOrigins]));
 };
 
 export const requireAllowedOrigin = (req: Request) => {
   const origin = req.headers.get('origin');
-  const allowedOrigins = getAllowedOrigins();
+  const allowedOrigins = getAllowedOrigins(req);
 
   if (!origin || !allowedOrigins.includes(origin)) {
     return NextResponse.json({ error: 'Origin not allowed' }, { status: 403 });

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ACCESS_COOKIE_NAME, verifyAccessToken } from './lib/accessLock';
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
     const { pathname, search } = request.nextUrl;
     const isApiRoute = pathname.startsWith('/api/');
     const isUnlockRoute = pathname === '/api/access/unlock';

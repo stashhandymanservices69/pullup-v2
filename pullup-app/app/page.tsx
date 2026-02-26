@@ -16,9 +16,10 @@ const firebaseConfig = {
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
+const hasFirebaseConfig = Object.values(firebaseConfig).every((value) => typeof value === 'string' && value.trim().length > 0);
+const app: any = (typeof window !== 'undefined' && hasFirebaseConfig) ? initializeApp(firebaseConfig) : null;
+const db: any = app ? getFirestore(app) : null;
+const auth: any = app ? getAuth(app) : null;
 
 // --- GLOBAL STYLES ---
 const GlobalStyles = () => (
@@ -2561,70 +2562,78 @@ export default function App() {
     const [orderId, setOrderId] = useState(null);
     const [dashboardInitialTab, setDashboardInitialTab] = useState('orders');
     const [userProfile, setUserProfile] = useState({ name: '', carModel: '', carColor: '', plate: '', mobile: '' });
+    const isFirebaseAvailable = Boolean(db && auth);
 
     const openLegal = (modalType: any) => setActiveModal(modalType);
 
     // Handle return from Stripe
     useEffect(() => {
-        if (typeof window !== 'undefined') {
-            const savedUser = localStorage.getItem('pullup_profile');
-            if (savedUser) { try { setUserProfile(JSON.parse(savedUser)); } catch(e){} }
-            const params = new URLSearchParams(window.location.search);
-            if (params.get('merch_success') === 'true') {
-                alert('Payment successful! Your Founders cap is being embroidered and shipped.');
-                window.history.replaceState(null, '', '/');
-                setView('landing');
-                return;
-            }
-            if (params.get('success') === 'true') {
-                const oid = params.get('order_id');
-                const cafeId = params.get('cafe_id');
-                const sessionId = params.get('session_id');
-                if (oid) {
-                    setOrderId(oid as any);
-                    if (cafeId) getDoc(doc(db, 'cafes', cafeId)).then(s => { if(s.exists()) setSelectedCafe({id: s.id, ...s.data()} as any); });
-                    if (sessionId) {
-                        fetch('/api/stripe/checkout/confirm', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ sessionId })
-                        })
-                        .then(async (res) => {
-                            const data = await res.json();
-                            if (!res.ok) throw new Error(data.error || 'Checkout confirmation failed');
-                            await updateDoc(doc(db, 'orders', oid), {
-                                paymentIntentId: data.paymentIntentId || null,
-                                paymentState: data.paymentIntentId ? 'authorized' : 'authorization_pending',
-                                checkoutSessionId: sessionId
-                            });
-                        })
-                        .catch(async () => {
-                            await updateDoc(doc(db, 'orders', oid), {
-                                paymentState: 'authorization_pending',
-                                checkoutSessionId: sessionId
-                            });
-                        });
-                    }
-                }
-                setView('tracking');
-                window.history.replaceState(null, '', '/');
-                return;
-            }
+        if (typeof window === 'undefined') return;
 
-            const cafeIdFromQr = params.get('cafe');
-            if (cafeIdFromQr) {
-                getDoc(doc(db, 'cafes', cafeIdFromQr)).then((snap) => {
-                    if (snap.exists()) {
-                        setSelectedCafe({ id: snap.id, ...snap.data() } as any);
-                        setView('cafe-menu');
-                    }
-                });
+        const savedUser = localStorage.getItem('pullup_profile');
+        if (savedUser) { try { setUserProfile(JSON.parse(savedUser)); } catch(e){} }
+
+        if (!db) return;
+
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('merch_success') === 'true') {
+            alert('Payment successful! Your Founders cap is being embroidered and shipped.');
+            window.history.replaceState(null, '', '/');
+            setView('landing');
+            return;
+        }
+        if (params.get('success') === 'true') {
+            const oid = params.get('order_id');
+            const cafeId = params.get('cafe_id');
+            const sessionId = params.get('session_id');
+            if (oid) {
+                setOrderId(oid as any);
+                if (cafeId) getDoc(doc(db, 'cafes', cafeId)).then(s => { if(s.exists()) setSelectedCafe({id: s.id, ...s.data()} as any); });
+                if (sessionId) {
+                    fetch('/api/stripe/checkout/confirm', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ sessionId })
+                    })
+                    .then(async (res) => {
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || 'Checkout confirmation failed');
+                        await updateDoc(doc(db, 'orders', oid), {
+                            paymentIntentId: data.paymentIntentId || null,
+                            paymentState: data.paymentIntentId ? 'authorized' : 'authorization_pending',
+                            checkoutSessionId: sessionId
+                        });
+                    })
+                    .catch(async () => {
+                        await updateDoc(doc(db, 'orders', oid), {
+                            paymentState: 'authorization_pending',
+                            checkoutSessionId: sessionId
+                        });
+                    });
+                }
             }
+            setView('tracking');
+            window.history.replaceState(null, '', '/');
+            return;
+        }
+
+        const cafeIdFromQr = params.get('cafe');
+        if (cafeIdFromQr) {
+            getDoc(doc(db, 'cafes', cafeIdFromQr)).then((snap) => {
+                if (snap.exists()) {
+                    setSelectedCafe({ id: snap.id, ...snap.data() } as any);
+                    setView('cafe-menu');
+                }
+            });
         }
     }, []);
 
     // Auth Initialization (Anonymous fallback ensures no 'unauthenticated' error)
     useEffect(() => {
+        if (!auth || !db) {
+            setLoading(false);
+            return;
+        }
         const initAuth = async () => { try { await signInAnonymously(auth); } catch(e) { console.error("Guest Auth Failed"); } };
         initAuth();
         return onAuthStateChanged(auth, async (u) => {
@@ -2640,6 +2649,7 @@ export default function App() {
     }, []);
 
     useEffect(() => {
+        if (!auth) return;
         const openBusinessSupport = () => {
             const currentUser = auth.currentUser;
             if (!currentUser || currentUser.isAnonymous || !cafeProfile) {
@@ -2655,12 +2665,17 @@ export default function App() {
 
     // Load Approved Cafes for Discovery
     useEffect(() => {
+        if (!db) return;
         const q = query(collection(db, 'cafes'), where('isApproved', '==', true));
         return onSnapshot(q, (snap) => setAllCafes(snap.docs.map(d => ({ id: d.id, ...d.data() })) as any));
     }, []);
 
     // Master Checkout Function (Posts to Stripe)
     const handlePlaceOrder = async (details: string, carPhoto: string | null, gpsEnabled: boolean) => {
+        if (!db || !auth) {
+            alert('Service temporarily unavailable. Please try again in a moment.');
+            return;
+        }
         // 🔥 Re-enforce anonymous auth right before checkout to prevent ghost drops
         if (!auth.currentUser) { try { await signInAnonymously(auth); } catch(e) {} }
         
@@ -2724,7 +2739,18 @@ export default function App() {
         }
     };
 
-    if (loading) return <div className="min-h-screen bg-white flex items-center justify-center"><PullUpLogo className="animate-pulse-fast" /></div>;
+    if (loading && isFirebaseAvailable) return <div className="min-h-screen bg-white flex items-center justify-center"><PullUpLogo className="animate-pulse-fast" /></div>;
+
+    if (!isFirebaseAvailable) {
+        return (
+            <React.Fragment>
+                <GlobalStyles />
+                {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
+                {activeModal && <LegalDocumentModal type={activeModal} onClose={() => setActiveModal(null)} />}
+                <LandingPage setView={setView} onAbout={() => setShowAbout(true)} openLegal={openLegal} />
+            </React.Fragment>
+        );
+    }
 
     return (
         <React.Fragment>
