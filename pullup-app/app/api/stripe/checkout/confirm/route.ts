@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
-import Stripe from 'stripe';
 import { checkRateLimit, parseJson, requireAllowedOrigin, requireJsonContentType, serverError } from '@/app/api/_lib/requestSecurity';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
-  apiVersion: '2026-01-28.clover',
-});
+import { getStripeClient, stripeConfigErrorResponse } from '@/app/api/_lib/stripeServer';
 
 export async function POST(req: Request) {
   try {
+    const stripe = getStripeClient();
+    if (!stripe) return stripeConfigErrorResponse();
+
     const originCheck = requireAllowedOrigin(req);
     if (originCheck) return originCheck;
 

@@ -80,4 +80,15 @@ Why: using both Squarespace forwarding and Vercel redirects can cause double-red
 - [x] Remove unused variables (`CONTACT_EMAIL`, `sugar`, `setSugar`, `temp`, `setTemp`)
 - [x] Add missing `alt` text to all menu/logo image tags flagged by lint
 - [x] Commit and push lint fixes to `master`
-- [ ] Confirm latest Vercel deployment for `master` is **Ready**
+- [x] Confirm latest Vercel deployment for `master` is **Ready**
+
+Note: older failed deployments remain in history as **Error/Stale** and can be ignored once a newer **Ready** deployment is marked Current.
+
+### Step 8 — Restore lock screen (deploy correct app)
+- [ ] In Vercel Project Settings → General, set **Root Directory** to `pullup-app`
+- [ ] Ensure framework is Next.js for this project (or auto-detected)
+- [ ] Add env var `ACCESS_LOCK_CODE` (launch gate code)
+- [ ] Add env var `ACCESS_LOCK_SECRET` (minimum 32 chars)
+- [x] Patch Stripe API routes to lazy-init client (prevents build crash when `STRIPE_SECRET_KEY` missing)
+- [ ] Redeploy from latest `master`
+- [ ] Verify unauthenticated requests redirect to `/access`
