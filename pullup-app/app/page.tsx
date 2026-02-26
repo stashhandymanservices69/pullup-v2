@@ -26,19 +26,31 @@ const GlobalStyles = () => (
     <style>
         {`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #fafaf9; color: #1c1917; -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Inter', sans-serif; background-color: #fafaf9; color: #1c1917; -webkit-tap-highlight-color: transparent; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
         .font-serif { font-family: 'Playfair Display', serif; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .animate-fade-in { animation: fadeIn 0.4s ease-out; }
         .animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
         .animate-pulse-fast { animation: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .animate-scale-in { animation: scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes scaleIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
         .shadow-premium { box-shadow: 0 20px 50px rgba(0,0,0,0.05); }
+        .shadow-glow-orange { box-shadow: 0 0 40px rgba(249,115,22,0.15); }
         input[type=range] { -webkit-appearance: none; background: transparent; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #f97316; cursor: pointer; margin-top: -6px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 20px; width: 20px; border-radius: 50%; background: #f97316; cursor: pointer; margin-top: -8px; box-shadow: 0 2px 8px rgba(249,115,22,0.4); transition: transform 0.15s ease; }
+        input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.15); }
         input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #e7e5e4; border-radius: 2px; }
+        ::selection { background: rgba(249,115,22,0.2); color: #1c1917; }
+        * { scroll-behavior: smooth; }
+        button { cursor: pointer; }
+        button:active { transform: scale(0.97); }
+        @media (prefers-reduced-motion: reduce) {
+            .animate-fade-in, .animate-slide-up, .animate-scale-in, .animate-pulse-fast { animation: none; }
+            button:active { transform: none; }
+        }
         `}
     </style>
 );
@@ -96,6 +108,17 @@ const playNotificationSound = (type: string) => {
     osc.start(); osc.stop(ctx.currentTime + 0.8);
 };
 
+// Looping audible alert for pending orders - plays chime every 8 seconds until acknowledged
+let _pendingAlertInterval: ReturnType<typeof setInterval> | null = null;
+const startPendingOrderAlert = (type: string) => {
+    stopPendingOrderAlert();
+    playNotificationSound(type);
+    _pendingAlertInterval = setInterval(() => playNotificationSound(type), 8000);
+};
+const stopPendingOrderAlert = () => {
+    if (_pendingAlertInterval) { clearInterval(_pendingAlertInterval); _pendingAlertInterval = null; }
+};
+
 // --- SMS ENGINE (Twilio Hook) ---
 const sendSMS = async (mobile: string, message: string) => {
     if (!mobile) return;
@@ -124,6 +147,8 @@ const ONBOARDING_VIDEOS = [
 ];
 
 const MIN_CURBSIDE_FEE = 2.0;
+const MAX_CURBSIDE_FEE = 6.0;
+const MIN_CART_TOTAL = 5.0;
 const EARLY_ADOPTER_CAFE_LIMIT = 33;
 const LIVE_GPS_AUTO_SHARE_DISTANCE_METERS = 2500;
 const LIVE_GPS_AUTO_SHARE_ETA_SECONDS = 300;
@@ -134,7 +159,7 @@ const LIVE_GPS_UPDATE_MIN_INTERVAL_MS = 12000;
 const normalizeCurbsideFee = (value: unknown) => {
     const numericValue = Number(value);
     if (!Number.isFinite(numericValue)) return MIN_CURBSIDE_FEE;
-    return Math.max(MIN_CURBSIDE_FEE, Number(numericValue.toFixed(2)));
+    return Math.min(MAX_CURBSIDE_FEE, Math.max(MIN_CURBSIDE_FEE, Number(numericValue.toFixed(2))));
 };
 
 const haversineDistanceMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -395,24 +420,26 @@ const LegalDocumentModal = ({ type, onClose }: any) => {
                     <div className="space-y-4 text-sm text-stone-600 leading-relaxed">
                         <div>
                             <h4 className="font-bold text-stone-900 mb-2">Consumer Terms of Service</h4>
-                            <p className="text-xs mb-3"><strong>1. Platform Role:</strong> Pull Up Coffee Pty Ltd acts strictly as a technology and payment facilitator connecting users with independent cafés. We do not prepare, store, or deliver food or beverages. The merchant is the sole supplier.</p>
-                            <p className="text-xs mb-3"><strong>2. Merchant Responsibility:</strong> All food and beverage quality, safety, allergen management, and compliance with food handling standards remains the sole responsibility of the Café partner.</p>
-                            <p className="text-xs mb-3"><strong>3. Consumer Guarantees:</strong> All goods must be of acceptable quality and match their description. Pull Up Coffee accepts no liability for food-borne illness, allergen reactions, or product defects. These fall entirely under the Café's liability.</p>
-                            <p className="text-xs mb-3"><strong>4. Refunds & Chargebacks:</strong> Refund eligibility is determined by the individual Café partner. Customers must arrive within the agreed grace period or risk order forfeiture. The platform reserves the right to process payment reversals and chargebacks as permitted by law.</p>
-                            <p className="text-xs mb-3"><strong>5. Traffic Compliance:</strong> All orders must be picked up from a legally parked vehicle. Do not interact with this app while driving. Pull Up Coffee accepts no liability for traffic infringements, accidents, or parking violations.</p>
-                            <p className="text-xs mb-3"><strong>6. Liability & Safety Framework:</strong> Pull Up Coffee is a software platform and does not prepare, handle, or deliver beverages. The cafe is responsible for safe preparation, temperature, and secure lids. Customers are responsible for safe handling and placement in a stationary vehicle. Pull Up Coffee is only liable if a platform instruction directly causes harm.</p>
-                            <p className="text-xs mb-3"><strong>7. Incident Protocol:</strong> Any spill or burn claim is handled by the cafe's public and product liability insurance. Pull Up order logs provide time/location evidence of handoff.</p>
-                            <p className="text-xs mb-3"><strong>8. Prevention Standards:</strong> Cafes must use secure lids and are strongly advised to double-cup hot beverages. Baristas must only hand beverages to stationary vehicles.</p>
-                            <p className="text-xs mb-3"><strong>9. Data Privacy:</strong> Location data (precise GPS coordinates) is collected solely to enable curbside handoff and merchant notification. Data is encrypted and deleted upon order completion, per Privacy Act 1988 (Cth) compliance.</p>
-                            <p className="text-xs"><strong>10. User Conduct:</strong> Users must not submit fraudulent orders, abuse platform infrastructure, or engage in unsafe driving. Violation results in account termination.</p>
+                            <p className="text-xs mb-3"><strong>1. Platform Bridge Role:</strong> Pull Up Coffee Pty Ltd operates as a transparent technology and payment bridge connecting consumers with independent café partners. We do not prepare, store, handle, or deliver food or beverages. The cafe merchant is the sole supplier of all goods. Pull Up facilitates discovery, ordering, payment processing, and curbside coordination only.</p>
+                            <p className="text-xs mb-3"><strong>2. Dynamic Pass-Through Pricing:</strong> All payment processing fees (Stripe 1.75% + 30¢ per transaction) are transparently passed through to the consumer. Your cafe receives 100% of menu prices and 80% of the curbside fee. The total shown at checkout includes the exact processing cost — no hidden markups.</p>
+                            <p className="text-xs mb-3"><strong>3. Merchant Responsibility:</strong> All food and beverage quality, safety, allergen management, and compliance with food handling standards (including Food Standards Australia New Zealand requirements) remains the sole responsibility of the café partner.</p>
+                            <p className="text-xs mb-3"><strong>4. Consumer Guarantees:</strong> Goods supplied by cafe partners must be of acceptable quality and match their description under Australian Consumer Law. Pull Up Coffee accepts no liability for food-borne illness, allergen reactions, or product defects — these fall entirely under the café&apos;s liability and insurance coverage.</p>
+                            <p className="text-xs mb-3"><strong>5. Authorisation Hold & Capture:</strong> Upon checkout, Pull Up places a temporary authorisation hold on your card (not a charge). The cafe reviews your order and either accepts (capturing payment) or declines (releasing the hold). Ghost holds that remain unactioned are automatically swept and released within 72 hours.</p>
+                            <p className="text-xs mb-3"><strong>6. Refunds & Chargebacks:</strong> Refund eligibility is determined by the individual café partner. Customers must arrive within the agreed grace period or risk order forfeiture. The platform reserves the right to process payment reversals and chargebacks as permitted by law.</p>
+                            <p className="text-xs mb-3"><strong>7. Traffic Compliance:</strong> All orders must be picked up from a legally parked vehicle. Do not interact with this app while driving. Pull Up Coffee accepts zero liability for traffic infringements, accidents, or parking violations.</p>
+                            <p className="text-xs mb-3"><strong>8. Minimum Order:</strong> A minimum cart value of $5.00 (before fees) is required per transaction to ensure service viability for cafe partners.</p>
+                            <p className="text-xs mb-3"><strong>9. Liability & Safety Framework:</strong> Pull Up Coffee is a software platform bridge only. The cafe is responsible for safe preparation, temperature control, and secure lids. Customers are responsible for safe handling and placement in a stationary vehicle. Pull Up Coffee is only liable if a direct platform instruction causes harm.</p>
+                            <p className="text-xs mb-3"><strong>10. Data Privacy:</strong> Location data (precise GPS coordinates) is collected solely to enable curbside handoff and merchant notification. Data is encrypted and purged upon order completion, per Privacy Act 1988 (Cth) compliance. See our Privacy Policy for full details.</p>
+                            <p className="text-xs"><strong>11. User Conduct:</strong> Users must not submit fraudulent orders, abuse platform infrastructure, or engage in unsafe driving. Violation results in immediate account termination.</p>
                         </div>
                         <div className="border-t border-stone-200 pt-4">
                             <h4 className="font-bold text-stone-900 mb-2">Merchant Partner Agreement (Summary)</h4>
-                            <p className="text-xs mb-3"><strong>1. Commission Structure:</strong> Pull Up Coffee charges a negotiated service fee per transaction, deducted directly from merchant payouts on a weekly settlement cycle.</p>
-                            <p className="text-xs mb-3"><strong>2. Indemnification:</strong> Merchants agree to indemnify and hold harmless Pull Up Coffee from all claims arising from food safety, intellectual property infringement, parking violations, pedestrian injuries, or traffic breaches.</p>
-                            <p className="text-xs mb-3"><strong>3. Curbside Compliance:</strong> Merchants assume sole responsibility for compliance with local council zoning laws, traffic management plans, and pedestrian safety regulations. Pull Up Coffee assumes zero liability for illegal loading zones or traffic obstructions.</p>
-                            <p className="text-xs mb-3"><strong>4. Insurance Requirement:</strong> Merchants must maintain current Public and Product Liability Insurance covering curbside handoff risks.</p>
-                            <p className="text-xs"><strong>5. PCI-DSS Compliance:</strong> Merchants must handle all customer data in strict compliance with Payment Card Industry Data Security Standards (PCI DSS). No unauthorized local storage or extraction of personal information is permitted.</p>
+                            <p className="text-xs mb-3"><strong>1. Platform Bridge Model:</strong> Pull Up Coffee operates as a transparent payment bridge. Merchants receive 100% of their menu prices plus 80% of the curbside fee. The platform retains only the 20% curbside fee share. All Stripe processing costs are passed through to the consumer, never deducted from merchant earnings.</p>
+                            <p className="text-xs mb-3"><strong>2. Authorisation & Capture:</strong> Orders use a manual capture flow. The merchant must accept or decline within a reasonable timeframe. Unactioned authorisation holds are automatically swept and released within 72 hours by the platform&apos;s ghost-hold sweeper.</p>
+                            <p className="text-xs mb-3"><strong>3. Indemnification:</strong> Merchants agree to indemnify and hold harmless Pull Up Coffee from all claims arising from food safety, allergen reactions, intellectual property infringement, parking violations, pedestrian injuries, or traffic breaches.</p>
+                            <p className="text-xs mb-3"><strong>4. Curbside Compliance:</strong> Merchants assume sole responsibility for local council zoning laws, traffic management plans, and pedestrian safety. Pull Up Coffee assumes zero liability for illegal loading zones or traffic obstructions.</p>
+                            <p className="text-xs mb-3"><strong>5. Insurance Requirement:</strong> Merchants must maintain current Public and Product Liability Insurance covering curbside handoff operations.</p>
+                            <p className="text-xs"><strong>6. Data Security:</strong> Merchants must handle all customer data in compliance with the Privacy Act 1988 (Cth) and PCI-DSS standards. No unauthorised local storage or extraction of personal information is permitted.</p>
                         </div>
                     </div>
                 );
@@ -509,7 +536,8 @@ const LegalDocumentModal = ({ type, onClose }: any) => {
                             <p className="text-xs mb-3"><strong>6. ACCC Disclosure Requirements:</strong> All affiliate promotions must include clear, conspicuous disclosure: "I earn a commission if you sign up via my link." Disclosure must be immediate, adjacent to the link, and written in plain English.</p>
                             <p className="text-xs mb-3"><strong>7. Spam Act 2003 Compliance:</strong> If you use email or SMS to promote the platform, you must obtain explicit prior consent from recipients and include a functional unsubscribe mechanism in every communication.</p>
                             <p className="text-xs mb-3"><strong>8. Indemnification:</strong> You agree to indemnify Pull Up Coffee against all claims arising from your promotional activities, including making unauthorized or exaggerated claims about the app, breaching privacy laws, or infringing third-party intellectual property.</p>
-                            <p className="text-xs border-t border-stone-200 pt-3"><strong>Ready to earn?</strong> Sign up at hello@pullupcoffee.com.au with "Affiliate Interest" in the subject line. Provide your name, contact details, and preferred promotional channels. We'll send you marketing assets and your unique referral link within 24 hours.</p>
+                            <p className="text-xs mb-3"><strong>9. Automated Referral Codes:</strong> Each approved affiliate receives a unique referral code (e.g., PULLUP-YOURNAME). When a cafe signs up through your link or enters your code, you're automatically credited. Track your referrals and earnings through your affiliate dashboard.</p>
+                            <p className="text-xs border-t border-stone-200 pt-3"><strong>Ready to earn?</strong> Email hello@pullupcoffee.com.au with "Affiliate Interest" in the subject line. Include your name, preferred social channels, and audience size. You'll receive your unique code, tracking dashboard link, and marketing assets within 24 hours.</p>
                         </div>
                     </div>
                 );
@@ -517,20 +545,33 @@ const LegalDocumentModal = ({ type, onClose }: any) => {
                 return (
                     <div className="space-y-4 text-sm text-stone-600 leading-relaxed">
                         <div>
-                            <h4 className="font-bold text-stone-900 mb-2">Certificate of Priority, Authorship & Evidence Chain</h4>
-                            <p className="text-xs mb-3"><strong>Author:</strong> Steven Weir</p>
-                            <p className="text-xs mb-3"><strong>Verification Date:</strong> 16 January 2026 (Australia-Pacific time reference)</p>
-                            <p className="text-xs mb-3"><strong>Claim of Original Expression:</strong> This notice asserts ownership of the specific expression, user flow, and implementation logic embodied in the Pull Up Coffee platform. Copyright attaches automatically upon fixation.</p>
-                            <p className="text-xs mb-3"><strong>Prior Art Notice:</strong> This document serves as an evidentiary record of conception and proof-of-concept for the platform as of the effective date and any earlier creation timestamps in associated files and repositories.</p>
-                            <p className="text-xs mb-3"><strong>Novel Functionality Claimed:</strong> Dynamic curbside fee adjustment, arrival time locking pre-payment, late arrival forfeiture logic, GPS-based curbside notification, and latency management tied to demand.</p>
-                            <p className="text-xs mb-3"><strong>Digital Signature Reference:</strong> VERIFIED USER: 4551</p>
-                            <p className="text-xs font-mono break-all mb-3"><strong>Cryptographic Timestamp Hash (Reference):</strong> 8f4b2e1a9c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f</p>
-                            <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 space-y-2">
-                                <p className="text-xs"><strong>Court-Ready Evidence Workflow:</strong> Preserve repository commit history, file hashes, and independent timestamp evidence together.</p>
-                                <p className="text-xs"><strong>Verification Steps:</strong> (1) Export relevant commit(s) from Git history, (2) produce SHA-256 file hashes, (3) preserve logs and timestamp attestation records, (4) store immutable copies with legal counsel.</p>
-                                <p className="text-xs font-mono break-all"><strong>PowerShell Hash Example:</strong> Get-FileHash -Algorithm SHA256 .\app\page.tsx</p>
-                                <p className="text-xs"><strong>Important:</strong> This notice supports evidentiary preparation but is not legal advice. Final admissibility depends on jurisdiction, chain-of-custody, and counsel-led filing practice.</p>
+                            <h4 className="font-bold text-stone-900 mb-2">Intellectual Property Notice & Certificate of Priority</h4>
+                            <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+                                <p className="text-xs font-bold text-red-800 mb-2">⚠️ LEGAL NOTICE — ALL RIGHTS RESERVED</p>
+                                <p className="text-xs text-red-700">The Pull Up Coffee platform, including all source code, algorithms, business logic, user interface designs, branding, trade dress, and proprietary workflows, is the exclusive intellectual property of Steven Weir and/or Pull Up Coffee Pty Ltd (ABN: 17 587 686 972). Unauthorized reproduction, reverse engineering, cloning, or derivative creation is strictly prohibited and will be pursued to the fullest extent of Australian and international law.</p>
                             </div>
+                            <p className="text-xs mb-3"><strong>Author & Sole Creator:</strong> Steven Weir</p>
+                            <p className="text-xs mb-3"><strong>Entity:</strong> Pull Up Coffee Pty Ltd (ABN: 17 587 686 972)</p>
+                            <p className="text-xs mb-3"><strong>Verification Date:</strong> 16 January 2026 (AEDT)</p>
+                            <p className="text-xs mb-3"><strong>Jurisdiction:</strong> All disputes are governed by the laws of the State of New South Wales, Australia. The parties submit to the exclusive jurisdiction of NSW courts.</p>
+                            <p className="text-xs mb-3"><strong>Copyright Assertion:</strong> Copyright © 2025–2026 Steven Weir / Pull Up Coffee Pty Ltd. This platform and all its components are protected under the Copyright Act 1968 (Cth). Copyright attaches automatically upon fixation in material form. All moral rights are asserted.</p>
+                            <p className="text-xs mb-3"><strong>Trademark Notice:</strong> "Pull Up Coffee", the Pull Up Coffee logo, and associated trade dress are trademarks of Pull Up Coffee Pty Ltd. Use without written authorization constitutes infringement under the Trade Marks Act 1995 (Cth).</p>
+                            <p className="text-xs mb-3"><strong>Novel Functionality Claimed (Prior Art):</strong> Dynamic curbside fee adjustment, authorization-hold-before-preparation payment flow, GPS-based curbside arrival notification, late arrival forfeiture logic, "I'm Outside" manual override, looping audible merchant alerts, favorites-based SMS opt-in opening notifications, and pass-through processing fee transparency.</p>
+                            <p className="text-xs mb-3"><strong>Digital Signature Reference:</strong> VERIFIED USER: 4551</p>
+                            <p className="text-xs font-mono break-all mb-3"><strong>Cryptographic Timestamp Hash:</strong> 8f4b2e1a9c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f</p>
+                            <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 space-y-2">
+                                <p className="text-xs font-bold text-stone-900">Evidentiary Preservation Protocol</p>
+                                <p className="text-xs"><strong>1.</strong> Repository commit history (GitHub) with cryptographic signatures serves as independent timestamp evidence.</p>
+                                <p className="text-xs"><strong>2.</strong> SHA-256 file hashes of all source files are generated and preserved at each major commit.</p>
+                                <p className="text-xs"><strong>3.</strong> Immutable copies of source code, commit logs, and timestamp records are stored with legal counsel.</p>
+                                <p className="text-xs"><strong>4.</strong> WIPO Proof digital timestamps supplement repository evidence for international enforceability.</p>
+                                <p className="text-xs font-mono break-all"><strong>Hash Verification:</strong> Get-FileHash -Algorithm SHA256 .\app\page.tsx</p>
+                            </div>
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-4">
+                                <p className="text-xs font-bold text-amber-800 mb-2">Enforcement Statement</p>
+                                <p className="text-xs text-amber-700">Any party found to be infringing on the intellectual property described herein will receive a cease-and-desist notice. Continued infringement will result in legal proceedings seeking injunctive relief, damages, and costs under applicable Australian law (Copyright Act 1968, Trade Marks Act 1995, Competition and Consumer Act 2010) and international IP treaties (Berne Convention, TRIPS Agreement).</p>
+                            </div>
+                            <p className="text-xs text-stone-400 mt-3 italic">This notice is not legal advice. Professional legal counsel has been engaged for IP protection strategy.</p>
                         </div>
                     </div>
                 );
@@ -619,14 +660,20 @@ const LegalDocumentModal = ({ type, onClose }: any) => {
 const LandingPage = ({ setView, onAbout, openLegal }: any) => (
     <div className="flex flex-col min-h-screen bg-stone-900 text-white animate-fade-in relative overflow-x-hidden overflow-y-hidden font-sans">
         {/* ELEGANT TOP NAVIGATION */}
-        <div className="absolute top-4 right-4 left-4 sm:left-auto sm:top-6 sm:right-6 z-50 flex justify-end">
+        <div className="absolute top-4 right-4 left-4 sm:left-auto sm:top-6 sm:right-6 z-50 flex justify-end gap-3">
             <button 
-                onClick={() => setView('merchant-auth')} 
-                className="group relative bg-white/10 backdrop-blur-md border border-white/20 text-white px-5 sm:px-8 py-3 sm:py-3.5 rounded-full font-semibold text-xs sm:text-sm hover:bg-white/20 transition-all duration-300 flex items-center gap-2 sm:gap-2.5 shadow-lg hover:shadow-xl hover:scale-105"
+                onClick={() => setView('merchant-signup')} 
+                className="group relative bg-orange-600/90 backdrop-blur-md border border-orange-500/40 text-white px-5 sm:px-7 py-3 sm:py-3.5 rounded-full font-semibold text-xs sm:text-sm hover:bg-orange-500 transition-all duration-300 flex items-center gap-2 shadow-lg hover:shadow-xl hover:scale-105"
+            >
+                <span className="text-base">🚀</span>
+                <span className="tracking-wide">Join Pull Up</span>
+            </button>
+            <button 
+                onClick={() => setView('merchant-login')} 
+                className="group relative bg-white/10 backdrop-blur-md border border-white/20 text-white px-5 sm:px-7 py-3 sm:py-3.5 rounded-full font-semibold text-xs sm:text-sm hover:bg-white/20 transition-all duration-300 flex items-center gap-2 shadow-lg hover:shadow-xl hover:scale-105"
             >
                 <span className="text-base">☕</span>
-                <span className="tracking-wide">For Businesses</span>
-                <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-0 h-0.5 bg-orange-400 group-hover:w-3/4 transition-all duration-300"></div>
+                <span className="tracking-wide">Business Login</span>
             </button>
         </div>
         <div className="absolute top-0 left-0 w-full h-full bg-[url('https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1000&q=60')] bg-cover bg-center opacity-30"></div>
@@ -639,6 +686,16 @@ const LandingPage = ({ setView, onAbout, openLegal }: any) => (
             <button onClick={() => setView('discovery')} className="w-full max-w-xs sm:w-auto bg-white text-stone-900 py-4 sm:py-6 px-8 sm:px-16 rounded-[2rem] sm:rounded-[2.5rem] font-bold text-lg sm:text-2xl shadow-xl hover:scale-105 transition transform flex items-center justify-center gap-3 sm:gap-4">
                 <Icons.Car /> Order Now
             </button>
+            <div className="mt-6 sm:mt-8 flex items-center justify-center gap-4 sm:gap-6 text-stone-400">
+                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                    256-bit Encrypted
+                </div>
+                <div className="w-px h-3 bg-white/20"></div>
+                <div className="text-[10px] uppercase tracking-widest font-bold">Powered by Stripe</div>
+                <div className="w-px h-3 bg-white/20"></div>
+                <div className="text-[10px] uppercase tracking-widest font-bold">No App Download</div>
+            </div>
         </div>
 
         <footer className="relative z-10 bg-black/60 backdrop-blur-md border-t border-white/10 mt-auto">
@@ -648,7 +705,8 @@ const LandingPage = ({ setView, onAbout, openLegal }: any) => (
                         <h4 className="font-bold text-stone-300 mb-3 sm:mb-4 text-[11px] sm:text-[10px] uppercase tracking-widest">Platform</h4>
                         <ul className="space-y-2.5 sm:space-y-3 text-xs sm:text-[10px] text-stone-400 font-medium">
                             <li><button onClick={() => setView('discovery')} className="hover:text-orange-400 transition">Order Coffee</button></li>
-                            <li><button onClick={() => setView('merchant-auth')} className="hover:text-orange-400 transition">Business Login</button></li>
+                            <li><button onClick={() => setView('merchant-login')} className="hover:text-orange-400 transition">Business Login</button></li>
+                            <li><button onClick={() => setView('merchant-signup')} className="hover:text-orange-400 transition">Join as Partner</button></li>
                             <li><button onClick={onAbout} className="hover:text-orange-400 transition">About Vision</button></li>
                         </ul>
                     </div>
@@ -666,7 +724,7 @@ const LandingPage = ({ setView, onAbout, openLegal }: any) => (
                         <ul className="space-y-2.5 sm:space-y-3 text-xs sm:text-[10px] text-stone-400 font-medium">
                             <li><button onClick={() => openLegal('faq')} className="hover:text-orange-400 transition">FAQ</button></li>
                             <li><button onClick={() => openLegal('contact')} className="hover:text-orange-400 transition">Contact Us</button></li>
-                            <li><button onClick={() => setView('merch')} className="hover:text-orange-400 transition">Merchandise</button></li>
+                            <li><button onClick={() => setView('merch')} className="hover:text-orange-400 transition">Support the Founder</button></li>
                         </ul>
                     </div>
                     <div>
@@ -684,8 +742,82 @@ const LandingPage = ({ setView, onAbout, openLegal }: any) => (
     </div>
 );
 
-const CafeAuth = ({ setView, auth, db, openLegal }: any) => {
-    const [mode, setMode] = useState('apply');
+const BusinessLogin = ({ setView, auth, openLegal }: any) => {
+    const [email, setEmail] = useState('');
+    const [pass, setPass] = useState('');
+    const [loadingAuth, setLoadingAuth] = useState(false);
+
+    const handleLogin = async (e: any) => {
+        e.preventDefault();
+        setLoadingAuth(true);
+        try {
+            await signInWithEmailAndPassword(auth, email, pass);
+        } catch (err: any) {
+            alert(err.message.replace('Firebase: ', '').replace('Error ', ''));
+        } finally {
+            setLoadingAuth(false);
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center animate-fade-in relative text-white font-sans overflow-y-auto">
+            <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1559925393-8be0ec4767c8?auto=format&fit=crop&w=1200&q=80')] bg-cover bg-center opacity-10"></div>
+            <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/60 to-black/90"></div>
+            
+            <div className="relative z-10 w-full max-w-md px-6 py-16">
+                <div className="text-center mb-8">
+                    <button onClick={() => setView('landing')} className="inline-flex items-center gap-2 text-stone-400 hover:text-white transition text-sm mb-8">
+                        <Icons.X /> Back to Home
+                    </button>
+                    <PullUpLogo className="w-20 h-20 mx-auto mb-6 shadow-[0_0_40px_rgba(249,115,22,0.4)] border-none" />
+                    <h1 className="text-3xl font-serif italic font-bold text-white mb-2">Welcome Back</h1>
+                    <p className="text-stone-400 text-sm">Sign in to your partner dashboard.</p>
+                </div>
+
+                <div className="bg-[#1a1a1a] p-10 rounded-[2.5rem] shadow-2xl border border-stone-800/50 hover:border-orange-500/30 transition-colors">
+                    <h2 className="text-2xl font-serif italic font-bold mb-1 text-white">Business Login</h2>
+                    <p className="text-stone-500 text-[10px] uppercase tracking-[0.2em] mb-8 font-bold">Partner Dashboard Access</p>
+                    
+                    <form onSubmit={handleLogin} className="space-y-5">
+                        <div>
+                            <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-2">Email Address</label>
+                            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@cafe.com" className="w-full p-4 bg-[#0f0f0f] border border-stone-800 rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium" required />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-2">Password</label>
+                            <input type="password" value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••" minLength={6} className="w-full p-4 bg-[#0f0f0f] border border-stone-800 rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium" required />
+                        </div>
+                        <button type="submit" disabled={loadingAuth} className="w-full bg-orange-600 text-white py-5 rounded-2xl font-bold mt-4 hover:bg-orange-500 disabled:opacity-50 transition-all active:scale-95 uppercase tracking-widest text-sm shadow-[0_0_12px_rgba(249,115,22,0.25)]">
+                            {loadingAuth ? 'Signing In...' : 'SIGN IN'}
+                        </button>
+                    </form>
+
+                    <div className="mt-8 pt-6 border-t border-stone-800 text-center">
+                        <p className="text-stone-500 text-[10px] uppercase tracking-widest mb-4">New to Pull Up?</p>
+                        <button onClick={() => setView('merchant-signup')} className="text-orange-500 font-bold text-sm uppercase tracking-widest hover:text-orange-400 transition">
+                            → APPLY TO JOIN
+                        </button>
+                    </div>
+
+                    <div className="mt-6 pt-4 border-t border-stone-800 text-center space-y-2">
+                        <button onClick={() => openLegal('terms')} className="block w-full text-stone-500 hover:text-stone-300 font-medium text-[9px] uppercase tracking-widest transition">Legal Terms</button>
+                    </div>
+                </div>
+
+                <div className="mt-6 flex items-center justify-center gap-4 text-stone-500">
+                    <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                        256-bit Encrypted
+                    </div>
+                    <div className="w-px h-3 bg-white/20"></div>
+                    <div className="text-[10px] uppercase tracking-widest font-bold">Powered by Stripe</div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
     const [email, setEmail] = useState('');
     const [pass, setPass] = useState('');
     const [confirmPass, setConfirmPass] = useState('');
@@ -712,53 +844,53 @@ const CafeAuth = ({ setView, auth, db, openLegal }: any) => {
         };
         loadEarlyAdopterSpots();
     }, [db]);
-    
-    const handleSubmit = async (e: any) => {
+
+    const handleSignup = async (e: any) => {
         e.preventDefault();
         setLoadingAuth(true);
         try {
-            if (mode === 'apply') {
-                if (pass !== confirmPass) {
-                    throw new Error('Passwords do not match.');
-                }
-                const res = await createUserWithEmailAndPassword(auth, email, pass);
-                const cafesSnapshot = await getDocs(collection(db, 'cafes'));
-                const signupSequence = cafesSnapshot.size + 1;
-                const earlyAdopterEligible = signupSequence <= EARLY_ADOPTER_CAFE_LIMIT;
-                await setDoc(doc(db, 'cafes', res.user.uid), {
-                    businessName: bizName,
-                    phone: phone,
-                    address: address,
-                    email: email,
-                    abn: abn,
-                    googleBusinessUrl: googleBusinessUrl,
-                    businessDescription: businessDescription,
-                    billingEmail: billingEmail || email,
-                    isApproved: false,
-                    status: 'closed',
-                    curbsideFee: MIN_CURBSIDE_FEE,
-                    globalPricing: { milk: 0.50, syrup: 0.50, medium: 0.50, large: 1.00, extraShot: 0.50 },
-                    audioTheme: 'modern',
-                    appliedAt: new Date().toISOString(),
-                    signupSequence,
-                    earlyAdopterEligible,
-                    transactionCostModel: earlyAdopterEligible ? 'platform-covers-all-stripe' : 'cafe-covers-stripe-percent',
-                    stripePercentRate: earlyAdopterEligible ? 0 : 0.0175,
-                });
-
-                for (const item of DEFAULT_MENU_ITEMS) {
-                    await addDoc(collection(db, 'cafes', res.user.uid, 'menu'), {
-                        ...item,
-                        active: true,
-                    });
-                }
-                alert("Application sent! We will notify you once approved.");
-                setMode('login');
-            } else {
-                await signInWithEmailAndPassword(auth, email, pass);
+            if (pass !== confirmPass) {
+                throw new Error('Passwords do not match.');
             }
-        } catch (err: any) { alert(err.message.replace('Firebase: ','').replace('Error ','')); } 
-        finally { setLoadingAuth(false); }
+            const res = await createUserWithEmailAndPassword(auth, email, pass);
+            const cafesSnapshot = await getDocs(collection(db, 'cafes'));
+            const signupSequence = cafesSnapshot.size + 1;
+            const earlyAdopterEligible = signupSequence <= EARLY_ADOPTER_CAFE_LIMIT;
+            await setDoc(doc(db, 'cafes', res.user.uid), {
+                businessName: bizName,
+                phone: phone,
+                address: address,
+                email: email,
+                abn: abn,
+                googleBusinessUrl: googleBusinessUrl,
+                businessDescription: businessDescription,
+                billingEmail: billingEmail || email,
+                isApproved: false,
+                status: 'closed',
+                curbsideFee: MIN_CURBSIDE_FEE,
+                globalPricing: { milk: 0.50, syrup: 0.50, medium: 0.50, large: 1.00, extraShot: 0.50 },
+                audioTheme: 'modern',
+                appliedAt: new Date().toISOString(),
+                signupSequence,
+                earlyAdopterEligible,
+                transactionCostModel: earlyAdopterEligible ? 'platform-covers-all-stripe' : 'cafe-covers-stripe-percent',
+                stripePercentRate: earlyAdopterEligible ? 0 : 0.0175,
+            });
+
+            for (const item of DEFAULT_MENU_ITEMS) {
+                await addDoc(collection(db, 'cafes', res.user.uid, 'menu'), {
+                    ...item,
+                    active: true,
+                });
+            }
+            alert("Application sent! We will notify you once approved. You can now log in.");
+            await signOut(auth);
+            setView('merchant-login');
+        } catch (err: any) {
+            alert(err.message.replace('Firebase: ', '').replace('Error ', ''));
+        } finally {
+            setLoadingAuth(false);
+        }
     };
 
     return (
@@ -774,7 +906,7 @@ const CafeAuth = ({ setView, auth, db, openLegal }: any) => {
                     <PullUpLogo className="w-16 h-16 shadow-[0_0_40px_rgba(249,115,22,0.4)] border-none mb-8" />
                     <h1 className="text-4xl md:text-5xl font-serif italic font-bold text-white mb-6 leading-tight">Turn street parking into your most profitable table.</h1>
                     <p className="text-stone-400 text-lg mb-10 leading-relaxed font-medium">
-                        Pull Up Coffee bridges the gap for customers who <em>want</em> your product, but can't easily walk through your door.
+                        Pull Up Coffee bridges the gap for customers who <em>want</em> your product, but can&apos;t easily walk through your door.
                     </p>
 
                     <div className="space-y-8">
@@ -795,8 +927,8 @@ const CafeAuth = ({ setView, auth, db, openLegal }: any) => {
                         <div className="flex items-start gap-5">
                             <div className="text-orange-500 mt-1 scale-125"><Icons.CheckCircle /></div>
                             <div>
-                                <h4 className="font-bold text-white text-sm uppercase tracking-widest mb-2">The "Beach-to-Cafe" Crowd</h4>
-                                <p className="text-stone-400 text-sm leading-relaxed font-medium">Capture impulse buys from customers who are underdressed, in gym gear, or straight from the beach and don't want to walk inside.</p>
+                                <h4 className="font-bold text-white text-sm uppercase tracking-widest mb-2">The &quot;Beach-to-Cafe&quot; Crowd</h4>
+                                <p className="text-stone-400 text-sm leading-relaxed font-medium">Capture impulse buys from customers who are underdressed, in gym gear, or straight from the beach and don&apos;t want to walk inside.</p>
                             </div>
                         </div>
                         <div className="bg-gradient-to-br from-orange-500/20 to-orange-600/10 p-6 rounded-3xl border border-orange-500/30 backdrop-blur-md mt-4">
@@ -808,10 +940,9 @@ const CafeAuth = ({ setView, auth, db, openLegal }: any) => {
                 </div>
             </div>
 
-            {/* RIGHT COLUMN: THE AUTH FORM */}
+            {/* RIGHT COLUMN: SIGNUP FORM */}
             <div className="w-full lg:w-1/2 flex items-center justify-center p-8 md:p-20 relative z-10 bg-[#0f0f0f]">
                 <div className="w-full max-w-md">
-                    {/* Back to Home Button */}
                     <div className="text-center mb-6">
                         <button onClick={() => setView('landing')} className="inline-flex items-center gap-2 text-stone-400 hover:text-white transition text-sm">
                             <Icons.X /> Back to Home
@@ -820,8 +951,8 @@ const CafeAuth = ({ setView, auth, db, openLegal }: any) => {
 
                     <div className="lg:hidden text-center mb-10">
                         <PullUpLogo className="w-20 h-20 mx-auto mb-6 shadow-[0_0_40px_rgba(249,115,22,0.4)] border-none" />
-                        <h1 className="text-3xl font-serif italic font-bold text-white mb-2">Pull Up Partners</h1>
-                        <p className="text-stone-400 text-sm">Capture the drive-thru market.</p>
+                        <h1 className="text-3xl font-serif italic font-bold text-white mb-2">Join Pull Up</h1>
+                        <p className="text-stone-400 text-sm">Zero contracts. Zero hardware. Full margin.</p>
                     </div>
 
                     <div className="lg:hidden bg-stone-900/70 border border-stone-700 rounded-3xl p-5 mb-8">
@@ -834,65 +965,54 @@ const CafeAuth = ({ setView, auth, db, openLegal }: any) => {
                     </div>
 
                     <div className="bg-[#1a1a1a] p-10 rounded-[2.5rem] shadow-2xl w-full border border-stone-800/50 hover:border-orange-500/30 transition-colors">
-                        <h2 className="text-2xl font-serif italic font-bold mb-1 text-white">{mode === 'apply' ? 'Join Pull Up' : 'Business Login'}</h2>
-                        <p className="text-stone-500 text-[10px] uppercase tracking-[0.2em] mb-4 font-bold">{mode === 'apply' ? 'Zero contracts. Zero hardware.' : 'WELCOME BACK'}</p>
-                        {mode === 'apply' && (
-                            <div className="mb-4 p-3 rounded-xl border border-orange-500/40 bg-orange-500/10">
-                                <p className="text-[9px] uppercase tracking-widest font-bold text-orange-300">Early Adopter Incentive</p>
-                                <p className="text-xs text-stone-200 mt-1">
-                                    {earlyAdopterSpotsLeft === null
-                                        ? 'First 33 partner cafes get platform-covered Stripe transaction costs.'
-                                        : earlyAdopterSpotsLeft > 0
-                                            ? `${earlyAdopterSpotsLeft} of ${EARLY_ADOPTER_CAFE_LIMIT} spots left for platform-covered Stripe transaction costs.`
-                                            : `All ${EARLY_ADOPTER_CAFE_LIMIT} early adopter spots are filled. New signups use the standard transaction model.`}
-                                </p>
-                            </div>
-                        )}
+                        <h2 className="text-2xl font-serif italic font-bold mb-1 text-white">Join Pull Up</h2>
+                        <p className="text-stone-500 text-[10px] uppercase tracking-[0.2em] mb-4 font-bold">Zero contracts. Zero hardware.</p>
+                        <div className="mb-4 p-3 rounded-xl border border-orange-500/40 bg-orange-500/10">
+                            <p className="text-[9px] uppercase tracking-widest font-bold text-orange-300">Early Adopter Incentive</p>
+                            <p className="text-xs text-stone-200 mt-1">
+                                {earlyAdopterSpotsLeft === null
+                                    ? 'First 33 partner cafes get platform-covered Stripe transaction costs.'
+                                    : earlyAdopterSpotsLeft > 0
+                                        ? `${earlyAdopterSpotsLeft} of ${EARLY_ADOPTER_CAFE_LIMIT} spots left for platform-covered Stripe transaction costs.`
+                                        : `All ${EARLY_ADOPTER_CAFE_LIMIT} early adopter spots are filled. New signups use the standard transaction model.`}
+                            </p>
+                        </div>
                         
-                        {mode === 'login' && (
-                            <div className="mb-6 p-4 bg-stone-900 border border-stone-700 rounded-xl text-center">
-                                <p className="text-stone-400 text-xs mb-3">New business?</p>
-                                <button onClick={() => setMode('apply')} className="w-full bg-orange-600 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-orange-500 transition">Apply to Join →</button>
-                            </div>
-                        )}
-                        
-                        <form onSubmit={handleSubmit} className="space-y-5">
-                            {mode === 'apply' && (
-                                <div className="bg-stone-900/50 p-5 rounded-xl border border-stone-700 mb-6">
-                                    <p className="text-[9px] text-stone-400 uppercase tracking-widest mb-3 font-bold">📋 Business Information</p>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">Business Name</label>
-                                            <input type="text" value={bizName} onChange={e => setBizName(e.target.value)} placeholder="Your Cafe" className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">ABN</label>
-                                            <input type="text" value={abn} onChange={e => setAbn(e.target.value)} placeholder="12 345 678 901" className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
-                                        </div>
-                                        <div className="md:col-span-2">
-                                            <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">Store Address</label>
-                                            <input type="text" value={address} onChange={e => setAddress(e.target.value)} placeholder="123 Main St, Sydney NSW" className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">Phone Number</label>
-                                            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="(02) XXXX XXXX" className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">Billing Email (opt)</label>
-                                            <input type="email" value={billingEmail} onChange={e => setBillingEmail(e.target.value)} placeholder="billing@..." className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" />
-                                        </div>
+                        <form onSubmit={handleSignup} className="space-y-5">
+                            <div className="bg-stone-900/50 p-5 rounded-xl border border-stone-700 mb-6">
+                                <p className="text-[9px] text-stone-400 uppercase tracking-widest mb-3 font-bold">📋 Business Information</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">Business Name</label>
+                                        <input type="text" value={bizName} onChange={e => setBizName(e.target.value)} placeholder="Your Cafe" className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
                                     </div>
-                                    <div className="mt-4">
-                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">Google Business URL (optional - helps verification)</label>
-                                        <input type="url" value={googleBusinessUrl} onChange={e => setGoogleBusinessUrl(e.target.value)} placeholder="https://goo.gl/maps/..." className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" />
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">ABN</label>
+                                        <input type="text" value={abn} onChange={e => setAbn(e.target.value)} placeholder="12 345 678 901" className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
                                     </div>
-                                    <div className="mt-4">
-                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">About Your Business</label>
-                                        <textarea value={businessDescription} onChange={e => setBusinessDescription(e.target.value)} placeholder="What do you sell? Expected order volume? Peak hours?" rows={3} className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm resize-none" required />
-                                        <p className="text-[8px] text-stone-500 mt-2 italic">✓ Approval within 1-3 business days</p>
+                                    <div className="md:col-span-2">
+                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">Store Address</label>
+                                        <input type="text" value={address} onChange={e => setAddress(e.target.value)} placeholder="123 Main St, Sydney NSW" className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">Phone Number</label>
+                                        <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="(02) XXXX XXXX" className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">Billing Email (opt)</label>
+                                        <input type="email" value={billingEmail} onChange={e => setBillingEmail(e.target.value)} placeholder="billing@..." className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" />
                                     </div>
                                 </div>
-                            )}
+                                <div className="mt-4">
+                                    <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">Google Business URL (optional - helps verification)</label>
+                                    <input type="url" value={googleBusinessUrl} onChange={e => setGoogleBusinessUrl(e.target.value)} placeholder="https://goo.gl/maps/..." className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" />
+                                </div>
+                                <div className="mt-4">
+                                    <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">About Your Business</label>
+                                    <textarea value={businessDescription} onChange={e => setBusinessDescription(e.target.value)} placeholder="What do you sell? Expected order volume? Peak hours?" rows={3} className="w-full p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm resize-none" required />
+                                    <p className="text-[8px] text-stone-500 mt-2 italic">✓ Approval within 1-3 business days</p>
+                                </div>
+                            </div>
                             <div>
                                 <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-2">Email Address</label>
                                 <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@cafe.com" className="w-full p-4 bg-[#0f0f0f] border border-stone-800 rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium" required />
@@ -901,26 +1021,24 @@ const CafeAuth = ({ setView, auth, db, openLegal }: any) => {
                                 <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-2">Password</label>
                                 <input type="password" value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••" minLength={6} className="w-full p-4 bg-[#0f0f0f] border border-stone-800 rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium" required />
                             </div>
-                            {mode === 'apply' && (
-                                <div>
-                                    <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-2">Confirm Password</label>
-                                    <input type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} placeholder="••••••••" minLength={6} className="w-full p-4 bg-[#0f0f0f] border border-stone-800 rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium" required />
-                                </div>
-                            )}
+                            <div>
+                                <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-2">Confirm Password</label>
+                                <input type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} placeholder="••••••••" minLength={6} className="w-full p-4 bg-[#0f0f0f] border border-stone-800 rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium" required />
+                            </div>
                             <button type="submit" disabled={loadingAuth} className="w-full bg-orange-600 text-white py-5 rounded-2xl font-bold mt-6 hover:bg-orange-500 disabled:opacity-50 transition-all active:scale-95 uppercase tracking-widest text-sm shadow-[0_0_12px_rgba(249,115,22,0.25)]">
-                                {loadingAuth ? 'Processing...' : (mode === 'apply' ? 'Submit Application' : 'SIGN IN NOW')}
+                                {loadingAuth ? 'Processing...' : 'Submit Application'}
                             </button>
                         </form>
 
                         <div className="mt-8 pt-6 border-t border-stone-800 text-center">
-                            <p className="text-stone-500 text-[10px] uppercase tracking-widest mb-4">{mode === 'apply' ? 'Already have an account?' : 'Want to expand your market?'}</p>
-                            <button onClick={() => setMode(mode === 'apply' ? 'login' : 'apply')} className="text-orange-500 font-bold text-sm uppercase tracking-widest hover:text-orange-400 transition">
-                                {mode === 'apply' ? 'Log in here' : '→ APPLY TO JOIN'}
+                            <p className="text-stone-500 text-[10px] uppercase tracking-widest mb-4">Already have an account?</p>
+                            <button onClick={() => setView('merchant-login')} className="text-orange-500 font-bold text-sm uppercase tracking-widest hover:text-orange-400 transition">
+                                Log in here
                             </button>
                         </div>
 
                         <div className="mt-8 pt-6 border-t border-stone-800 text-center">
-                            <button onClick={() => setShowExploreMore((prev) => !prev)} className="w-full flex items-center justify-between text-stone-300 text-[10px] uppercase tracking-widest font-bold bg-[#111111] border border-stone-800 rounded-2xl px-4 py-3 hover:border-stone-700 transition">
+                            <button onClick={() => setShowExploreMore((prev: boolean) => !prev)} className="w-full flex items-center justify-between text-stone-300 text-[10px] uppercase tracking-widest font-bold bg-[#111111] border border-stone-800 rounded-2xl px-4 py-3 hover:border-stone-700 transition">
                                 <span>Explore More</span>
                                 <span className={`transition-transform ${showExploreMore ? 'rotate-90' : ''}`}><Icons.ChevronRight /></span>
                             </button>
@@ -947,13 +1065,17 @@ const CafeAuth = ({ setView, auth, db, openLegal }: any) => {
     );
 };
 
-const MerchStore = ({ setView }: any) => {
+const SupportFounder = ({ setView }: any) => {
     const [loading, setLoading] = useState(false);
 
-    const handleBuyHat = async () => {
+    const handleSupport = async (tier: string) => {
         setLoading(true);
         try {
-            const res = await fetch('/api/stripe/merch', { method: 'POST' });
+            const res = await fetch('/api/stripe/merch', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tier })
+            });
             const data = await res.json();
             if (data.url) window.location.href = data.url;
             else alert("Checkout Error: " + data.error);
@@ -969,49 +1091,67 @@ const MerchStore = ({ setView }: any) => {
             <header className="bg-white/90 backdrop-blur-md sticky top-0 z-40 border-b border-stone-100 shadow-sm p-6">
                 <div className="max-w-6xl mx-auto flex justify-between items-center">
                     <button onClick={() => setView('landing')} className="text-[10px] font-bold uppercase tracking-widest text-stone-500 hover:text-stone-900 transition flex items-center gap-2"><Icons.X /> Back</button>
-                    <span className="font-serif italic font-bold text-xl text-stone-900 tracking-tight">Merch Store</span>
+                    <span className="font-serif italic font-bold text-xl text-stone-900 tracking-tight">Support Pull Up</span>
                 </div>
             </header>
 
-            <div className="flex-1 flex items-center justify-center p-6 pb-24">
-                <div className="w-full max-w-5xl grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
-                    <div className="bg-stone-200 rounded-[3rem] aspect-square flex items-center justify-center p-8 shadow-inner overflow-hidden relative border-4 border-white">
-                        <img
-                            src="/merch/hat.jpg"
-                            alt="Pull Up Coffee Dad Hat"
-                            className="w-full h-full object-cover rounded-[2rem] mix-blend-multiply opacity-95"
-                            onError={(e: any) => {
-                                e.currentTarget.src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='800' height='800'><rect width='100%' height='100%' fill='%23e7e5e4'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%236b7280' font-family='Arial' font-size='28'>Add hat image at /public/merch/hat.jpg</text></svg>";
-                            }}
-                        />
-                    </div>
-                    <div>
-                        <div className="bg-orange-50 text-orange-600 px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-widest mb-6 inline-block border border-orange-100 shadow-sm">Classic Dad Hat</div>
-                        <h2 className="text-5xl lg:text-6xl font-serif font-bold text-stone-900 italic tracking-tighter leading-none mb-6">Classic Dad Hat.</h2>
-                        <p className="text-stone-500 mb-8 text-lg leading-relaxed font-medium">A clean, universal-fit dad hat with premium embroidery. Relaxed, low-profile shape with an adjustable strap.</p>
+            <div className="flex-1 flex flex-col items-center justify-center p-6 pb-24">
+                <div className="w-full max-w-2xl text-center mb-12">
+                    <PullUpLogo className="w-20 h-20 mx-auto mb-6" />
+                    <h2 className="text-4xl md:text-5xl font-serif font-bold text-stone-900 italic tracking-tighter leading-none mb-4">Buy the Founder a Coffee</h2>
+                    <p className="text-stone-500 text-lg leading-relaxed max-w-lg mx-auto">Pull Up Coffee is bootstrapped by a solo founder. Every contribution goes directly toward platform development, hosting, and keeping things running for partner cafes.</p>
+                </div>
 
-                        <div className="flex items-end gap-4 mb-8 pb-8 border-b border-stone-200">
-                            <span className="text-5xl font-bold text-stone-900 tracking-tight">$45</span>
-                            <span className="text-stone-400 mb-2 font-bold uppercase tracking-widest text-[10px]">AUD / +$10 Flat Rate Shipping</span>
+                <div className="w-full max-w-3xl grid md:grid-cols-3 gap-6">
+                    {/* Coffee Tier */}
+                    <div className="bg-white rounded-[2rem] border border-stone-200 shadow-sm p-8 flex flex-col items-center text-center hover:border-orange-300 hover:shadow-md transition-all">
+                        <div className="text-4xl mb-4">☕</div>
+                        <h3 className="font-serif italic font-bold text-2xl text-stone-900 mb-2">A Coffee</h3>
+                        <p className="text-stone-500 text-sm mb-6 leading-relaxed">Help keep the lights on and the code flowing.</p>
+                        <div className="flex items-end gap-2 mb-6">
+                            <span className="text-4xl font-bold text-stone-900">$4.50</span>
+                            <span className="text-stone-400 text-[10px] font-bold uppercase tracking-widest mb-1">AUD</span>
                         </div>
-
-                        <ul className="space-y-4 mb-10 text-sm text-stone-700 font-bold">
-                            <li className="flex items-center gap-4"><span className="text-orange-500 scale-125"><Icons.CheckCircle /></span> Unstructured, low-profile fit</li>
-                            <li className="flex items-center gap-4"><span className="text-orange-500 scale-125"><Icons.CheckCircle /></span> Adjustable strap with antique buckle</li>
-                            <li className="flex items-center gap-4"><span className="text-orange-500 scale-125"><Icons.CheckCircle /></span> Made to order with premium embroidery</li>
-                        </ul>
-
-                        <button onClick={handleBuyHat} disabled={loading} className="w-full bg-stone-900 text-white py-6 rounded-[2rem] font-bold text-lg shadow-2xl hover:bg-stone-800 transition transform active:scale-[0.98] flex items-center justify-center gap-3 disabled:opacity-50 uppercase tracking-widest">
-                            {loading ? 'Securing Checkout...' : <><Icons.CreditCard /> Buy Now Securely</>}
+                        <button onClick={() => handleSupport('coffee')} disabled={loading} className="w-full bg-orange-600 text-white py-4 rounded-2xl font-bold uppercase tracking-widest text-xs hover:bg-orange-500 transition disabled:opacity-50 active:scale-95 shadow-lg">
+                            {loading ? 'Loading...' : 'Buy a Coffee'}
                         </button>
-
-                        <div className="mt-8 p-5 bg-stone-100 rounded-2xl flex items-start gap-4 border border-stone-200">
-                            <div className="text-stone-400 mt-0.5"><Icons.Info /></div>
-                            <p className="text-xs text-stone-500 leading-relaxed font-medium">
-                                <strong>Support Note:</strong> Thanks for backing Pull Up Coffee. Made on demand and shipped with tracking.
-                            </p>
-                        </div>
                     </div>
+
+                    {/* Supporter Tier */}
+                    <div className="bg-white rounded-[2rem] border-2 border-orange-400 shadow-lg p-8 flex flex-col items-center text-center relative overflow-hidden">
+                        <div className="absolute top-0 left-0 right-0 bg-orange-500 text-white text-[9px] font-bold uppercase tracking-widest py-1.5 text-center">Most Popular</div>
+                        <div className="text-4xl mb-4 mt-4">🧡</div>
+                        <h3 className="font-serif italic font-bold text-2xl text-stone-900 mb-2">Big Supporter</h3>
+                        <p className="text-stone-500 text-sm mb-6 leading-relaxed">Fuel a week of late-night coding and feature drops.</p>
+                        <div className="flex items-end gap-2 mb-6">
+                            <span className="text-4xl font-bold text-stone-900">$10</span>
+                            <span className="text-stone-400 text-[10px] font-bold uppercase tracking-widest mb-1">AUD</span>
+                        </div>
+                        <button onClick={() => handleSupport('supporter')} disabled={loading} className="w-full bg-stone-900 text-white py-4 rounded-2xl font-bold uppercase tracking-widest text-xs hover:bg-stone-800 transition disabled:opacity-50 active:scale-95 shadow-lg">
+                            {loading ? 'Loading...' : 'Support Now'}
+                        </button>
+                    </div>
+
+                    {/* Founders Hat Tier */}
+                    <div className="bg-white rounded-[2rem] border border-stone-200 shadow-sm p-8 flex flex-col items-center text-center hover:border-orange-300 hover:shadow-md transition-all">
+                        <div className="text-4xl mb-4">🧢</div>
+                        <h3 className="font-serif italic font-bold text-2xl text-stone-900 mb-2">Founders Cap</h3>
+                        <p className="text-stone-500 text-sm mb-6 leading-relaxed">Limited edition dad hat with embroidered Pull Up logo. Ships AU-wide.</p>
+                        <div className="flex items-end gap-2 mb-6">
+                            <span className="text-4xl font-bold text-stone-900">$45</span>
+                            <span className="text-stone-400 text-[10px] font-bold uppercase tracking-widest mb-1">AUD + $10 Ship</span>
+                        </div>
+                        <button onClick={() => handleSupport('hat')} disabled={loading} className="w-full bg-stone-900 text-white py-4 rounded-2xl font-bold uppercase tracking-widest text-xs hover:bg-stone-800 transition disabled:opacity-50 active:scale-95 shadow-lg">
+                            {loading ? 'Loading...' : 'Get the Cap'}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="mt-10 p-5 bg-stone-100 rounded-2xl flex items-start gap-4 border border-stone-200 max-w-2xl w-full">
+                    <div className="text-stone-400 mt-0.5"><Icons.Info /></div>
+                    <p className="text-xs text-stone-500 leading-relaxed font-medium">
+                        <strong>100% Transparent:</strong> Every dollar goes to platform hosting, development tools, and keeping Pull Up free for partner cafes. No investors, no VC — just coffee and code.
+                    </p>
                 </div>
             </div>
         </div>
@@ -1026,6 +1166,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
     const [menu, setMenu] = useState<any[]>([]);
     const [botInput, setBotInput] = useState('');
     const [botChat, setBotChat] = useState([{ type: 'bot', text: 'Hi! I am your Pull Up Support Assistant. Ask me in plain language and I will give you the fastest action steps.' }]);
+    const [showMostAsked, setShowMostAsked] = useState(false);
     
     const [isOnline, setIsOnline] = useState(profile?.status === 'open');
     const [notifyFavoritesEnabled, setNotifyFavoritesEnabled] = useState(profile?.notifyFavoritesEnabled ?? true);
@@ -1049,6 +1190,8 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
     const [supportWeekKey, setSupportWeekKey] = useState(profile?.supportWeekKey || '');
     const [businessNameDraft, setBusinessNameDraft] = useState(profile?.businessName || '');
     const [storefrontLogo, setStorefrontLogo] = useState<string | null>(profile?.logo || null);
+    const [billingEmailDraft, setBillingEmailDraft] = useState(profile?.billingEmail || profile?.email || '');
+    const [accountSaveStatus, setAccountSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
     const [platformStats, setPlatformStats] = useState({
         totalCafes: 0,
         approvedCafes: 0,
@@ -1166,10 +1309,16 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
         return onSnapshot(q, snap => {
             const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             const active = list.filter((o: any) => o.status === 'pending' || o.status === 'preparing' || o.status === 'ready');
+            const pendingCount = active.filter((o: any) => o.status === 'pending').length;
             const approachingCount = active.filter((o: any) => o.approachState === 'approaching' || o.isArriving).length;
             setOrders(active);
             setHistory(list.filter((o: any) => o.status === 'completed' || o.status === 'rejected'));
-            if (active.length > prevOrderCount.current) { playNotificationSound(audioTheme); }
+            // Start looping alert if any pending orders, stop when all acknowledged
+            if (pendingCount > 0 && audioTheme !== 'off') {
+                startPendingOrderAlert(audioTheme);
+            } else {
+                stopPendingOrderAlert();
+            }
             if (approachingCount > prevApproachingCount.current) { playNotificationSound(audioTheme); }
             prevOrderCount.current = active.length;
             prevApproachingCount.current = approachingCount;
@@ -1276,7 +1425,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
     }, [db, isPlatformAdmin]);
 
     useEffect(() => {
-        botChatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        setTimeout(() => botChatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     }, [botChat]);
 
     const saveSettings = async (field: string, value: any) => { await updateDoc(doc(db, 'cafes', user.uid), { [field]: value }); };
@@ -1374,18 +1523,26 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
 
         setTimeout(() => {
             const knowledgeBase = [
-                { id: 'payouts', keywords: ['payout', 'paid', 'bank', 'money', 'stripe', 'transfer', 'settlement'], text: 'Fast answer: go to Payments → Connect Stripe Payouts, then choose daily/weekly/instant. Once connected, payouts go to your nominated bank account automatically.' },
-                { id: 'curbside-fee', keywords: ['curbside', 'fee', 'change fee', 'increase fee', 'minimum', 'pricing'], text: 'Fast answer: go to Operations → Dynamic Curbside Fee and use the slider. Minimum is locked at $2.00. You keep 80%, platform keeps 20%.' },
-                { id: 'pause-orders', keywords: ['pause', 'offline', 'stop orders', 'busy', 'turn off'], text: 'Fast answer: go to Operations and toggle Accepting Orders to OFFLINE. Customers stop seeing you as available instantly.' },
-                { id: 'menu', keywords: ['menu', 'add item', 'first item', 'edit item', 'photo', 'price'], text: 'Fast answer: go to Menu tab. Add one item first, set price, upload photo, then save. You can edit anytime.' },
-                { id: 'late-customer', keywords: ['late', 'no show', 'grace', 'forfeit', 'did not arrive'], text: 'Fast answer: customers have a 10-minute grace window. If they are late, you can forfeit at your discretion and follow your refund policy.' },
-                { id: 'decline', keywords: ['decline', 'reject', 'cancel order', 'cannot make'], text: 'Fast answer: on a pending order, tap the red X, enter a reason, and submit. Authorization is voided if not captured.' },
-                { id: 'delay', keywords: ['delay', 'running late', 'sms', 'message customer', 'notify'], text: 'Fast answer: open a preparing/ready order and tap Notify Delay (SMS). Customer gets an instant update.' },
-                { id: 'favorites', keywords: ['favourite', 'favorite', 'heart', 'sms alert', 'opening alert'], text: 'Fast answer: customers can heart your cafe, then confirm mobile at checkout. You can send opted-in opening SMS from Operations.' },
-                { id: 'refund', keywords: ['refund', 'chargeback', 'dispute', 'wrong order', 'cold'], text: 'Fast answer: refunds are merchant-managed. Handle case-by-case in your Stripe dashboard and your cafe policy.' },
-                { id: 'reporting', keywords: ['history', 'report', 'export', 'tax', 'accounting'], text: 'Fast answer: use History tab filters (daily/weekly/monthly/archive) and Email Report for quick bookkeeping summaries.' },
-                { id: 'support', keywords: ['human', 'support', 'ticket', 'help', 'contact', 'broken', 'bug', 'glitch'], text: 'Fast answer: email hello@pullupcoffee.com.au with your Cafe Name, issue, and (if relevant) Order ID. I can also generate a ticket reference now.' },
-                { id: 'onboarding', keywords: ['training', 'tutorial', 'video', 'setup'], text: 'Fast answer: open the onboarding videos in this Support tab for the quickest setup and staff training path.' },
+                { id: 'payouts', keywords: ['payout', 'paid', 'bank', 'money', 'stripe', 'transfer', 'settlement', 'earnings', 'income', 'revenue'], text: 'Fast answer: go to Payments → Connect Stripe Payouts, then choose daily/weekly/instant. Once connected, payouts go to your nominated bank account automatically. You keep 100% of menu prices + 80% of the curbside fee. Stripe processing is passed through to the customer.' },
+                { id: 'curbside-fee', keywords: ['curbside', 'fee', 'change fee', 'increase fee', 'minimum', 'pricing', 'price', 'charge', 'cost', 'expensive'], text: 'Fast answer: go to Operations → Dynamic Curbside Fee and use the slider. Range is $2.00–$6.00. You keep 80%, platform keeps 20%. Stripe processing fees are transparently passed to the customer. Increase during peak hours, lower for promos.' },
+                { id: 'pause-orders', keywords: ['pause', 'offline', 'stop orders', 'busy', 'turn off', 'close', 'closing', 'shut down', 'status'], text: 'Fast answer: go to Operations and toggle Accepting Orders to OFFLINE. Customers stop seeing you as available instantly. Toggle back to ONLINE when ready.' },
+                { id: 'menu', keywords: ['menu', 'add item', 'first item', 'edit item', 'photo', 'price', 'food', 'drink', 'product', 'image'], text: 'Fast answer: go to Menu tab. Tap Add Item, set name + price, upload a photo, then save. Use "Load Top 7 Menu" for quick starter items. You can edit/delete anytime.' },
+                { id: 'late-customer', keywords: ['late', 'no show', 'grace', 'forfeit', 'did not arrive', 'waiting', 'customer not here'], text: 'Fast answer: customers have a 10-minute grace window. If they do not arrive, you can forfeit the order at your discretion. The authorization hold is released — they are not charged.' },
+                { id: 'decline', keywords: ['decline', 'reject', 'cancel order', 'cannot make', 'refuse'], text: 'Fast answer: on a pending order, tap the red X, enter a reason, and submit. The customer is notified and the authorization hold is voided (no charge).' },
+                { id: 'delay', keywords: ['delay', 'running late', 'sms', 'message customer', 'notify', 'update'], text: 'Fast answer: open a preparing/ready order and tap Notify Delay (SMS). Customer gets an instant SMS update. You can also mark orders as "Ready" to notify them.' },
+                { id: 'favorites', keywords: ['favourite', 'favorite', 'heart', 'sms alert', 'opening alert', 'regulars', 'loyalty'], text: 'Fast answer: customers can heart your cafe, then confirm their mobile at checkout. You send opted-in opening SMS from Operations → Notify Favourites. Safety guard: opening alert only sends once per day.' },
+                { id: 'refund', keywords: ['refund', 'chargeback', 'dispute', 'wrong order', 'cold', 'complaint', 'unhappy'], text: 'Fast answer: refunds are merchant-managed. Handle case-by-case. For unactioned orders, authorizations void automatically. For captured payments, process refunds via your Stripe dashboard.' },
+                { id: 'reporting', keywords: ['history', 'report', 'export', 'tax', 'accounting', 'gst', 'records', 'analytics'], text: 'Fast answer: use History tab filters (daily/weekly/monthly/archive) for quick bookkeeping summaries. Stripe also provides exportable reports for your accountant/BAS.' },
+                { id: 'support', keywords: ['human', 'support', 'ticket', 'help', 'contact', 'broken', 'bug', 'glitch', 'issue', 'problem', 'error'], text: 'Fast answer: email hello@pullupcoffee.com.au with your Cafe Name, issue, and (if relevant) Order ID. Priority escalation within 15 min during business hours (Mon–Fri 8AM–6PM AEDT).' },
+                { id: 'onboarding', keywords: ['training', 'tutorial', 'video', 'setup', 'started', 'new', 'first time', 'how to use', 'walkthrough'], text: 'Fast answer: watch the 2-minute Setup Walkthrough and Live Order Flow videos in this Support tab. They cover everything from sign-up to accepting your first live order.' },
+                { id: 'gps', keywords: ['gps', 'location', 'distance', 'tracking', 'approaching', 'arrived', 'customer location'], text: 'Fast answer: when GPS is enabled, you see real-time distance to approaching customers on Live Orders. The system auto-detects arrivals within ~80m. Customers can also manually tap "I\'m Outside" to alert you.' },
+                { id: 'qr', keywords: ['qr', 'poster', 'print', 'scan', 'code'], text: 'Fast answer: go to Account tab → Generate QR Poster. It creates a printable A4 poster with your cafe QR code, business name, and "Scan to Order" branding. Place it near your curbside area.' },
+                { id: 'hours', keywords: ['hours', 'schedule', 'open time', 'close time', 'operating', 'window', 'when'], text: 'Fast answer: go to Operations → Operating Window. Set your open/close times. You must also be toggled ONLINE for customers to see you. The schedule is a guide — the online toggle is the master control.' },
+                { id: 'logo', keywords: ['logo', 'branding', 'brand', 'image', 'avatar', 'profile picture'], text: 'Fast answer: go to Account tab → Upload Logo. Use a square image for best results. Your logo appears in Discovery, menu view, and order notifications.' },
+                { id: 'affiliate', keywords: ['affiliate', 'referral', 'commission', 'bounty', 'refer', 'earn'], text: 'Fast answer: Pull Up offers a 25% affiliate bounty on platform fee for the first 30 days of every cafe you onboard. Email hello@pullupcoffee.com.au with "Affiliate Interest" to receive your unique link and marketing assets.' },
+                { id: 'security', keywords: ['security', 'safe', 'data', 'privacy', 'personal info', 'card details', 'encryption'], text: 'Fast answer: all payments are processed through Stripe with 256-bit encryption. We never store card numbers. Customer data is encrypted and GPS data is purged after order completion. Full Privacy Act 1988 compliance.' },
+                { id: 'early-adopter', keywords: ['early adopter', 'founders', 'first 33', 'special', 'benefit', 'bonus'], text: 'Fast answer: the first 33 cafe partners are "Early Adopters" — you keep 100% of your menu prices + 80% of the curbside fee with zero platform commission on menu items. This is locked in permanently for qualifying accounts.' },
+                { id: 'merch', keywords: ['merch', 'merchandise', 'hat', 'cap', 'founders', 'shop', 'buy'], text: 'Fast answer: visit the Merch Store from the main menu to grab limited-edition Pull Up Founders gear. Currently available: embroidered caps with AU shipping.' },
             ];
 
             const match = knowledgeBase.find(topic => topic.keywords.some(k => q.includes(k)));
@@ -1437,8 +1594,12 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
         <div className="min-h-screen bg-stone-100 flex flex-col animate-fade-in text-left font-sans">
             <div className="bg-[#0f0f0f] text-white p-6 flex justify-between items-center shadow-md relative z-30">
                 <div className="flex items-center gap-4">
-                    <PullUpLogo className="w-10 h-10 border-none bg-stone-800" />
-                    <div><h2 className="text-xl font-serif italic text-white leading-tight">{businessNameDraft || profile?.businessName || 'Cafe Dashboard'}</h2><p className="text-[10px] uppercase text-[#ff5e00] tracking-[0.2em] font-bold">Partner Shop</p></div>
+                    {storefrontLogo ? (
+                        <img src={storefrontLogo} alt="Logo" className="w-10 h-10 rounded-full object-cover border-2 border-orange-500/50" />
+                    ) : (
+                        <PullUpLogo className="w-10 h-10 border-none bg-stone-800" />
+                    )}
+                    <div><h2 className="text-xl font-serif italic text-white leading-tight">{businessNameDraft || profile?.businessName || 'Cafe Dashboard'}</h2><p className="text-[10px] uppercase text-[#ff5e00] tracking-[0.2em] font-bold">Partner Dashboard</p></div>
                 </div>
                 <button onClick={async () => { await signOut(auth); window.location.href = '/'; }} className="text-[10px] uppercase font-bold text-stone-400 hover:text-white transition">LOGOUT</button>
             </div>
@@ -1593,10 +1754,11 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
 
                             return filteredHistory.length === 0 ? <p className="text-stone-400 text-center py-10 italic">No orders in this period yet.</p> : (
                             <>
-                            <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4 mb-4 grid grid-cols-3 gap-3 text-center">
+                            <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4 mb-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
                                 <div><p className="text-[10px] text-stone-500 uppercase tracking-widest font-bold">Orders</p><p className="text-xl font-bold text-stone-900">{summary.totalOrders}</p></div>
                                 <div><p className="text-[10px] text-stone-500 uppercase tracking-widest font-bold">Menu Revenue</p><p className="text-xl font-bold text-stone-900">${summary.totalMenu.toFixed(2)}</p></div>
                                 <div><p className="text-[10px] text-stone-500 uppercase tracking-widest font-bold">Extra from Platform</p><p className="text-xl font-bold text-orange-600">${summary.totalExtra.toFixed(2)}</p></div>
+                                <div><p className="text-[10px] text-stone-500 uppercase tracking-widest font-bold">Est. SMS Costs</p><p className="text-xl font-bold text-stone-500">~${(summary.totalOrders * 2 * SMS_COST_PER_MESSAGE).toFixed(2)}</p><p className="text-[8px] text-stone-400 mt-1">~2 SMS/order × ${SMS_COST_PER_MESSAGE.toFixed(2)}</p></div>
                             </div>
                             <div className="space-y-3">
                                 {filteredHistory.map(o => {
@@ -1761,14 +1923,20 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                                 <h4 className="font-bold text-[10px] text-stone-500 uppercase tracking-widest mb-4">Dynamic Curbside Fee ($)</h4>
                                 <div className="bg-stone-50 p-6 rounded-2xl border border-stone-200 text-center">
                                     <span className="text-4xl font-serif font-bold text-orange-500 mb-6 block">${curbsideFee.toFixed(2)}</span>
-                                    <input type="range" min={MIN_CURBSIDE_FEE} max="10" step="0.50" value={curbsideFee} onChange={(e) => { const val = normalizeCurbsideFee(e.target.value); setCurbsideFee(val); saveSettings('curbsideFee', val); }} className="w-full accent-orange-500 h-2 bg-stone-300 rounded-lg outline-none cursor-pointer" />
+                                    <input type="range" min={MIN_CURBSIDE_FEE} max={MAX_CURBSIDE_FEE} step="0.50" value={curbsideFee} onChange={(e) => { const val = normalizeCurbsideFee(e.target.value); setCurbsideFee(val); saveSettings('curbsideFee', val); }} className="w-full accent-orange-500 h-2 bg-stone-300 rounded-lg outline-none cursor-pointer" />
                                 </div>
                                 <div className="mt-3 bg-orange-50 border border-orange-100 rounded-xl p-4 text-xs text-stone-700 space-y-2">
                                     <p className="font-bold text-orange-600">{isEarlyAdopter ? '💰 This is Your Cream on Top' : '💰 Curbside Fee Settings'}</p>
-                                    <p>The curbside fee is charged to customers for the convenience of curbside service. <strong>Minimum $2.00 required</strong> to protect profitability after platform share.</p>
-                                    <p><strong>Fee Split:</strong> You keep 80% of the curbside fee, platform keeps 20%. From platform&apos;s 20%, we cover the 30¢ Stripe fixed fee + all services (hosting, SMS, support, development).</p>
-                                    {!isEarlyAdopter && <p><strong>Transaction Model:</strong> Your cafe covers Stripe percentage on cafe revenue. Platform covers fixed 30¢ component.</p>}
-                                    <p className="text-[10px] text-stone-500 italic mt-2">💡 Increase during peak hours, lower for promotions. You decide what works for your business.</p>
+                                    <p>The curbside fee is charged to customers for the convenience of curbside service. <strong>Range: $2.00 – $6.00</strong> to protect profitability while staying customer-friendly.</p>
+                                    <p><strong>Dynamic Pass-Through Model:</strong> Pull Up acts as a transparent payment bridge. We add Stripe processing costs (1.75% + 30¢) on top of the order total so your cafe receives the full menu price. You keep <strong>80%</strong> of the curbside fee — your revenue, your margin.</p>
+                                    <p><strong>What You Keep:</strong> 100% of your menu prices + 80% of the curbside fee. Pull Up only retains the 20% platform share (which covers SMS, hosting, support, and development).</p>
+                                    {!isEarlyAdopter && <p><strong>Stripe Costs:</strong> Processing fees are transparently passed through to the customer — never deducted from your earnings.</p>}
+                                    <p className="text-[10px] text-stone-500 italic mt-2">💡 Increase during peak hours, lower for promotions. Min $5.00 cart required for customers.</p>
+                                </div>
+                                <div className="mt-3 bg-stone-50 border border-stone-200 rounded-xl p-4 text-xs text-stone-700">
+                                    <p className="font-bold text-stone-900 mb-2">Need a higher curbside fee?</p>
+                                    <p className="mb-3">If your business requires a curbside fee above $6.00 (e.g., premium location, extended delivery radius, or high-demand area), you can request a custom fee by emailing our team.</p>
+                                    <a href={`mailto:hello@pullupcoffee.com.au?subject=Custom%20Curbside%20Fee%20Request%20-%20${encodeURIComponent(profile?.businessName || 'My Cafe')}&body=Hi%20Pull%20Up%20Team%2C%0A%0ABusiness%20Name%3A%20${encodeURIComponent(profile?.businessName || '')}%0ARequested%20Fee%3A%20%24%0AReason%3A%20%0A%0AThanks`} className="inline-block bg-stone-900 text-white px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-stone-800 transition">📧 Request Custom Fee</a>
                                 </div>
                             </div>
 
@@ -1840,15 +2008,11 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                             </div>
                             <div className="bg-stone-50 p-5 rounded-xl border border-stone-200 space-y-4">
                                 <div>
-                                    <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500">Business</p>
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500">Business Name</p>
                                     <input
                                         type="text"
                                         value={businessNameDraft}
                                         onChange={(e) => setBusinessNameDraft(e.target.value)}
-                                        onBlur={async () => {
-                                            if (!user?.uid) return;
-                                            await updateDoc(doc(db, 'cafes', user.uid), { businessName: businessNameDraft.trim() || profile?.businessName || '' });
-                                        }}
                                         className="w-full p-3 mt-2 bg-white border border-stone-200 rounded-xl outline-none focus:border-orange-500 transition text-sm font-medium text-stone-900"
                                     />
                                 </div>
@@ -1858,7 +2022,6 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                                         if (!e.target.files?.[0] || !user?.uid) return;
                                         const compressed = await compressImage(e.target.files[0]);
                                         setStorefrontLogo(compressed);
-                                        await updateDoc(doc(db, 'cafes', user.uid), { logo: compressed });
                                     }} />
                                     <div className="flex items-center gap-4">
                                         <div className="w-16 h-16 rounded-full overflow-hidden bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-300">
@@ -1876,144 +2039,149 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                                     <label className="block text-[10px] font-bold uppercase tracking-widest text-stone-500 mb-2">Billing Email (for invoices)</label>
                                     <input 
                                         type="email" 
-                                        value={profile?.billingEmail || profile?.email || ''} 
-                                        onChange={async (e) => {
-                                            if (user?.uid) {
-                                                await updateDoc(doc(db, 'cafes', user.uid), { billingEmail: e.target.value });
-                                            }
-                                        }}
+                                        value={billingEmailDraft} 
+                                        onChange={(e) => setBillingEmailDraft(e.target.value)}
                                         placeholder="billing@yourcompany.com"
                                         className="w-full p-3 bg-white border border-stone-200 rounded-xl outline-none focus:border-orange-500 transition text-sm font-medium"
                                     />
                                     <p className="text-[9px] text-stone-500 mt-2 italic">All Stripe invoices and payment receipts will be sent here.</p>
                                 </div>
                             </div>
+                            <button 
+                                disabled={accountBusy}
+                                onClick={async () => {
+                                    if (!user?.uid) return;
+                                    setAccountSaveStatus('saving');
+                                    setAccountBusy(true);
+                                    try {
+                                        await updateDoc(doc(db, 'cafes', user.uid), { 
+                                            businessName: businessNameDraft.trim() || profile?.businessName || '',
+                                            billingEmail: billingEmailDraft.trim() || profile?.email || '',
+                                            ...(storefrontLogo ? { logo: storefrontLogo } : {}),
+                                        });
+                                        setAccountSaveStatus('saved');
+                                        setTimeout(() => setAccountSaveStatus('idle'), 2500);
+                                    } catch (err) {
+                                        alert('Failed to save. Please try again.');
+                                        setAccountSaveStatus('idle');
+                                    } finally {
+                                        setAccountBusy(false);
+                                    }
+                                }}
+                                className="w-full bg-orange-600 text-white p-4 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-orange-500 transition disabled:opacity-50"
+                            >
+                                {accountSaveStatus === 'saving' ? 'Saving...' : accountSaveStatus === 'saved' ? '✓ Saved Successfully' : 'Save Account Settings'}
+                            </button>
                             <button disabled={accountBusy} onClick={sendPasswordReset} className="w-full bg-stone-900 text-white p-4 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-stone-800 transition disabled:opacity-50">
                                 {accountBusy ? 'Sending Reset...' : 'Send Password Reset Email'}
                             </button>
                             <div className="pt-4 border-t border-stone-100">
-                                <p className="text-[9px] text-stone-500 italic text-center">Your settings are automatically saved. For security reasons, login email changes require manual verification.</p>
+                                <p className="text-[9px] text-stone-500 italic text-center">Press &quot;Save Account Settings&quot; to apply changes. Login email changes require manual verification via support.</p>
                             </div>
                         </div>
 
                         <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-stone-200 space-y-4">
                             <div>
                                 <h3 className="font-bold text-xl text-stone-900 mb-2">Marketing Materials</h3>
-                                <p className="text-sm text-stone-500">Download promotional materials for your storefront.</p>
+                                <p className="text-sm text-stone-500">Choose a poster design and print for your storefront window or curbside area.</p>
                             </div>
-                            <div className="bg-gradient-to-br from-orange-50 to-stone-50 border-2 border-orange-200 rounded-2xl p-8 text-center">
-                                <PullUpLogo className="w-20 h-20 mx-auto mb-4" />
-                                <h4 className="font-serif font-bold text-2xl text-stone-900 mb-2">Now Serving<br/>Curbside!</h4>
-                                <p className="text-sm text-stone-600 mb-4">Scan to order from your car</p>
-                                <div className="bg-white p-4 rounded-xl inline-block shadow-lg mb-4">
-                                    <img 
-                                        src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`https://pullupcoffee.com.au?cafe=${user?.uid}`)}`}
-                                        alt="QR Code"
-                                        className="w-48 h-48"
-                                    />
-                                </div>
-                                <p className="text-xs font-bold text-stone-900 mb-6">{profile?.businessName || 'Your Cafe'}</p>
-                                <button 
-                                    onClick={() => {
-                                        const printWindow = window.open('', '_blank');
-                                        if (printWindow) {
-                                            printWindow.document.write(`
-                                                <!DOCTYPE html>
-                                                <html>
-                                                <head>
-                                                    <title>Pull Up Coffee - ${profile?.businessName || 'Cafe'} Poster</title>
-                                                    <style>
-                                                        @page { size: A4 portrait; margin: 0; }
-                                                        body { margin: 0; padding: 24px; min-height: 100vh; display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; text-align: center; background: linear-gradient(135deg, #fff5eb 0%, #fafaf9 100%); box-sizing: border-box; }
-                                                        .container { width: 100%; max-width: 600px; margin: 0 auto; padding: 60px 40px; background: white; border-radius: 40px; box-shadow: 0 20px 60px rgba(0,0,0,0.1); border: 3px solid #f97316; box-sizing: border-box; }
-                                                        .logo { width: 120px; height: 120px; margin: 0 auto 30px; background: #f97316; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 30px rgba(249,115,22,0.3); }
-                                                        h1 { font-size: 48px; font-weight: 800; color: #1c1917; margin: 20px 0; line-height: 1.2; font-family: 'Georgia', serif; font-style: italic; }
-                                                        .tagline { font-size: 24px; color: #57534e; margin: 20px 0 40px; font-weight: 600; }
-                                                        .qr-container { background: white; padding: 30px; border-radius: 20px; display: inline-block; box-shadow: 0 10px 40px rgba(0,0,0,0.1); border: 2px solid #e7e5e4; }
-                                                        .qr-container img { width: 300px; height: 300px; }
-                                                        .cafe-name { font-size: 28px; font-weight: 700; color: #f97316; margin: 30px 0 20px; }
-                                                        .footer { font-size: 16px; color: #78716c; margin-top: 30px; }
-                                                        .powered { font-size: 14px; color: #a8a29e; margin-top: 20px; }
-                                                        @media print { body { background: white; padding: 0; } .container { box-shadow: none; } }
-                                                    </style>
-                                                </head>
-                                                <body>
-                                                    <div class="container">
-                                                        <div class="logo">
-                                                            <svg viewBox="0 0 100 100" width="80" height="80" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
-                                                                <path d="M 24 36 L 74 36 A 2 2 0 0 1 76 38 L 76 46" />
-                                                                <path d="M 22 42 C 22 55 28 66 32 66" />
-                                                                <path d="M 22 42 C 40 42 45 42 55 50 C 62 55 72 55 76 50" />
-                                                                <path d="M 76 46 C 76 60 72 66 68 66" />
-                                                                <path d="M 44 66 L 56 66" />
-                                                                <path d="M 76 44 C 92 44 96 52 86 62 C 80 67 72 62 68 60" />
-                                                                <circle cx="38" cy="66" r="6" />
-                                                                <circle cx="38" cy="66" r="2" />
-                                                                <circle cx="62" cy="66" r="6" />
-                                                                <circle cx="62" cy="66" r="2" />
-                                                            </svg>
-                                                        </div>
-                                                        <h1>Now Serving<br/>Curbside!</h1>
-                                                        <div class="tagline">☕ Order from your car · Drive-thru convenience</div>
-                                                        <div class="qr-container">
-                                                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`https://pullupcoffee.com.au?cafe=${user?.uid}`)}" alt="QR Code" />
-                                                        </div>
-                                                        <div class="cafe-name">${profile?.businessName || 'Your Cafe'}</div>
-                                                        <div class="footer">
-                                                            <strong>How it works:</strong><br/>
-                                                            1. Scan QR code<br/>
-                                                            2. Order & pay from your car<br/>
-                                                            3. We bring it curbside<br/>
-                                                        </div>
-                                                        <div class="powered">Powered by Pull Up Coffee™</div>
-                                                    </div>
-                                                </body>
-                                                </html>
-                                            `);
-                                            printWindow.document.close();
-                                            setTimeout(() => printWindow.print(), 500);
+                            <div className="grid md:grid-cols-3 gap-4">
+                                {/* Design 1: Professional */}
+                                <div className="border-2 border-stone-200 rounded-2xl p-4 text-center hover:border-orange-400 transition cursor-pointer group">
+                                    <div className="bg-gradient-to-br from-stone-900 to-stone-800 rounded-xl p-4 mb-3 aspect-[3/4] flex flex-col items-center justify-center text-white">
+                                        <div className="text-3xl mb-2">☕</div>
+                                        <p className="font-serif italic font-bold text-sm">Now Serving Curbside</p>
+                                        <div className="bg-white p-2 rounded-lg mt-2 inline-block">
+                                            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=60x60&data=${encodeURIComponent(`https://pullupcoffee.com.au?cafe=${user?.uid}`)}`} alt="QR" className="w-[60px] h-[60px]" />
+                                        </div>
+                                        <p className="text-[8px] mt-1 text-stone-300">{profile?.businessName || 'Your Cafe'}</p>
+                                    </div>
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-stone-900 mb-1">Professional</p>
+                                    <p className="text-[9px] text-stone-500 mb-3">Clean, minimal, dark theme</p>
+                                    <button onClick={() => {
+                                        const pw = window.open('', '_blank');
+                                        if (pw) {
+                                            pw.document.write(`<!DOCTYPE html><html><head><title>Poster - ${profile?.businessName || 'Cafe'}</title><style>@page{size:A4;margin:0}body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#1c1917;font-family:Georgia,serif;color:white;text-align:center}div.c{padding:60px 40px;max-width:600px}.qr{background:white;padding:24px;border-radius:16px;display:inline-block;margin:30px 0}.qr img{width:280px;height:280px}h1{font-size:52px;font-style:italic;margin:20px 0;line-height:1.1}.tag{font-size:20px;color:#a8a29e;margin-bottom:40px}.cafe{font-size:28px;color:#f97316;font-weight:700;margin-top:20px}.steps{font-size:15px;color:#78716c;margin-top:30px;line-height:1.8}.pow{font-size:12px;color:#57534e;margin-top:20px}@media print{body{background:#1c1917;-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="c"><h1>Now Serving<br/>Curbside</h1><div class="tag">Order from your car · Zero wait</div><div class="qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(`https://pullupcoffee.com.au?cafe=${user?.uid}`)}"/></div><div class="cafe">${profile?.businessName || 'Your Cafe'}</div><div class="steps">1. Scan QR · 2. Order & Pay · 3. We bring it out</div><div class="pow">Powered by Pull Up Coffee™</div></div></body></html>`);
+                                            pw.document.close(); setTimeout(() => pw.print(), 500);
                                         }
-                                    }}
-                                    className="w-full bg-orange-600 text-white p-4 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-orange-500 transition"
-                                >
-                                    🖨️ Print Store Poster (A4)
-                                </button>
-                                <p className="text-[9px] text-stone-500 mt-3 italic">Display near your entrance or window. Customers scan to order instantly.</p>
+                                    }} className="w-full bg-stone-900 text-white py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-stone-800 transition">🖨️ Print</button>
+                                </div>
+
+                                {/* Design 2: Sunrise Beach */}
+                                <div className="border-2 border-stone-200 rounded-2xl p-4 text-center hover:border-orange-400 transition cursor-pointer group">
+                                    <div className="bg-gradient-to-b from-orange-400 via-amber-300 to-yellow-100 rounded-xl p-4 mb-3 aspect-[3/4] flex flex-col items-center justify-center text-stone-900">
+                                        <div className="text-3xl mb-2">🌅</div>
+                                        <p className="font-bold text-sm">COFFEE ON THE CURB</p>
+                                        <p className="text-[9px] text-stone-700">No parking hassle. No queue.</p>
+                                        <div className="bg-white p-2 rounded-lg mt-2 inline-block shadow-md">
+                                            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=60x60&data=${encodeURIComponent(`https://pullupcoffee.com.au?cafe=${user?.uid}`)}`} alt="QR" className="w-[60px] h-[60px]" />
+                                        </div>
+                                        <p className="text-[8px] mt-1 font-bold">{profile?.businessName || 'Your Cafe'}</p>
+                                    </div>
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-stone-900 mb-1">Sunrise</p>
+                                    <p className="text-[9px] text-stone-500 mb-3">Warm, beachy, fun vibes</p>
+                                    <button onClick={() => {
+                                        const pw = window.open('', '_blank');
+                                        if (pw) {
+                                            pw.document.write(`<!DOCTYPE html><html><head><title>Poster - ${profile?.businessName || 'Cafe'}</title><style>@page{size:A4;margin:0}body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#fb923c 0%,#fbbf24 40%,#fef3c7 100%);font-family:-apple-system,sans-serif;color:#1c1917;text-align:center}div.c{padding:60px 40px;max-width:600px}h1{font-size:56px;font-weight:900;margin:20px 0;line-height:1}.tag{font-size:22px;color:#44403c;margin-bottom:40px;font-weight:600}.qr{background:white;padding:24px;border-radius:20px;display:inline-block;box-shadow:0 12px 40px rgba(0,0,0,0.15);margin:20px 0}.qr img{width:280px;height:280px}.cafe{font-size:28px;color:#9a3412;font-weight:800;margin-top:20px}.steps{font-size:16px;color:#57534e;margin-top:30px;line-height:1.8;font-weight:600}.pow{font-size:12px;color:#78716c;margin-top:20px}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="c"><div style="font-size:60px;margin-bottom:10px">🌅☕</div><h1>COFFEE<br/>ON THE CURB</h1><div class="tag">No parking hassle · No queue · Just vibes</div><div class="qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(`https://pullupcoffee.com.au?cafe=${user?.uid}`)}"/></div><div class="cafe">${profile?.businessName || 'Your Cafe'}</div><div class="steps">Scan → Order → We bring it out 🚗</div><div class="pow">Powered by Pull Up Coffee™</div></div></body></html>`);
+                                            pw.document.close(); setTimeout(() => pw.print(), 500);
+                                        }
+                                    }} className="w-full bg-orange-500 text-white py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-orange-400 transition">🖨️ Print</button>
+                                </div>
+
+                                {/* Design 3: Neon Night */}
+                                <div className="border-2 border-stone-200 rounded-2xl p-4 text-center hover:border-orange-400 transition cursor-pointer group">
+                                    <div className="bg-gradient-to-b from-purple-900 via-violet-800 to-indigo-900 rounded-xl p-4 mb-3 aspect-[3/4] flex flex-col items-center justify-center text-white">
+                                        <div className="text-3xl mb-2">🔥</div>
+                                        <p className="font-bold text-sm text-fuchsia-300" style={{textShadow:'0 0 10px #d946ef'}}>PULL UP &amp; SIP</p>
+                                        <p className="text-[9px] text-purple-300">Curbside coffee, zero wait</p>
+                                        <div className="bg-white p-2 rounded-lg mt-2 inline-block">
+                                            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=60x60&data=${encodeURIComponent(`https://pullupcoffee.com.au?cafe=${user?.uid}`)}`} alt="QR" className="w-[60px] h-[60px]" />
+                                        </div>
+                                        <p className="text-[8px] mt-1 text-purple-200">{profile?.businessName || 'Your Cafe'}</p>
+                                    </div>
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-stone-900 mb-1">Neon Night</p>
+                                    <p className="text-[9px] text-stone-500 mb-3">Bold, vibrant, eye-catching</p>
+                                    <button onClick={() => {
+                                        const pw = window.open('', '_blank');
+                                        if (pw) {
+                                            pw.document.write(`<!DOCTYPE html><html><head><title>Poster - ${profile?.businessName || 'Cafe'}</title><style>@page{size:A4;margin:0}body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#581c87 0%,#5b21b6 50%,#312e81 100%);font-family:-apple-system,sans-serif;color:white;text-align:center}div.c{padding:60px 40px;max-width:600px}h1{font-size:56px;font-weight:900;margin:20px 0;line-height:1;color:#e879f9;text-shadow:0 0 30px #d946ef,0 0 60px #a855f7}.tag{font-size:20px;color:#c4b5fd;margin-bottom:40px;font-weight:600}.qr{background:white;padding:24px;border-radius:20px;display:inline-block;box-shadow:0 0 40px rgba(168,85,247,0.4);margin:20px 0}.qr img{width:280px;height:280px}.cafe{font-size:28px;color:#fbbf24;font-weight:800;margin-top:20px;text-shadow:0 0 15px rgba(251,191,36,0.5)}.steps{font-size:16px;color:#a78bfa;margin-top:30px;line-height:1.8;font-weight:600}.pow{font-size:12px;color:#7c3aed;margin-top:20px}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="c"><div style="font-size:60px;margin-bottom:10px">🔥☕</div><h1>PULL UP<br/>& SIP</h1><div class="tag">Curbside coffee · Zero wait · Maximum vibes</div><div class="qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(`https://pullupcoffee.com.au?cafe=${user?.uid}`)}"/></div><div class="cafe">${profile?.businessName || 'Your Cafe'}</div><div class="steps">Scan → Order → We bring it out 🚗</div><div class="pow">Powered by Pull Up Coffee™</div></div></body></html>`);
+                                            pw.document.close(); setTimeout(() => pw.print(), 500);
+                                        }
+                                    }} className="w-full bg-purple-700 text-white py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-purple-600 transition">🖨️ Print</button>
+                                </div>
                             </div>
+                            <p className="text-[9px] text-stone-500 italic text-center">Display near your entrance or window facing the street. Customers scan to order instantly from their car.</p>
                         </div>
                     </div>
                 )}
 
                 {tab === 'support' && (
-                    <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-stone-200 flex flex-col h-[600px] relative overflow-hidden">
-                        <div className="flex items-center gap-4 mb-6 border-b border-stone-100 pb-6">
+                    <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-stone-200 flex flex-col min-h-[500px] max-h-[75vh] relative overflow-hidden">
+                        <div className="flex items-center gap-4 mb-4 border-b border-stone-100 pb-4">
                             <div className="bg-stone-100 p-3 rounded-full text-stone-900"><Icons.Robot /></div>
                             <div><h3 className="font-serif font-bold text-xl text-stone-900">Support Engine</h3><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mt-1">Platform Knowledge Base</p></div>
                         </div>
-                        <div className="mb-4 p-3 bg-orange-50 border border-orange-100 rounded-xl flex items-center justify-between gap-2">
+                        <div className="mb-3 p-3 bg-orange-50 border border-orange-100 rounded-xl flex items-center justify-between gap-2">
                             <p className="text-[10px] font-bold uppercase tracking-widest text-orange-600">Staff Training Videos</p>
                             <a href={ONBOARDING_VIDEOS[0].url} target="_blank" rel="noreferrer" className="text-[10px] font-bold uppercase tracking-widest text-stone-900">Open</a>
                         </div>
-                        <div className="mb-4 p-3 bg-stone-50 border border-stone-200 rounded-xl">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500 mb-2">Weekly Insight Snapshot</p>
-                            <div className="space-y-1 text-xs text-stone-600">
-                                {Object.entries(supportTopicCounts).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([topic, count]) => (
-                                    <p key={topic}><strong>{topic}</strong>: {count} question(s)</p>
-                                ))}
-                                {Object.keys(supportTopicCounts).length === 0 && <p>No support questions tracked this week yet.</p>}
-                            </div>
+                        <div className="mb-3">
+                            <button onClick={() => setShowMostAsked(prev => !prev)} className="w-full flex items-center justify-between p-3 bg-stone-50 border border-stone-200 rounded-xl hover:border-stone-300 transition">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500">Most Asked (Tap to Expand)</p>
+                                <span className={`text-stone-400 transition-transform ${showMostAsked ? 'rotate-90' : ''}`}><Icons.ChevronRight /></span>
+                            </button>
+                            {showMostAsked && (
+                                <div className="flex flex-wrap gap-2 mt-2 p-3 bg-stone-50 border border-stone-200 rounded-xl animate-fade-in">
+                                    {quickSupportPrompts.map((prompt) => (
+                                        <button key={prompt} onClick={() => { submitBotQuestion(prompt); setShowMostAsked(false); }} className="text-[10px] px-3 py-2 border border-stone-200 rounded-full bg-white hover:border-orange-400 hover:text-orange-600 transition font-bold uppercase tracking-widest text-stone-600">
+                                            {prompt}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
-                        <div className="mb-4 p-3 bg-stone-50 border border-stone-200 rounded-xl">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500 mb-2">Most Asked (Tap for Fast Answer)</p>
-                            <div className="flex flex-wrap gap-2">
-                                {quickSupportPrompts.map((prompt) => (
-                                    <button key={prompt} onClick={() => submitBotQuestion(prompt)} className="text-[10px] px-3 py-2 border border-stone-200 rounded-full bg-white hover:border-orange-400 hover:text-orange-600 transition font-bold uppercase tracking-widest text-stone-600">
-                                        {prompt}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="flex-1 overflow-y-auto space-y-4 mb-6 pr-2 text-sm">
+                        <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2 text-sm">
                             {botChat.map((m, i) => (
                                 <div key={i} className={`flex ${m.type === 'bot' ? 'justify-start' : 'justify-end'}`}>
                                     <div className={`p-5 rounded-[1.5rem] max-w-[85%] leading-relaxed ${m.type === 'bot' ? 'bg-stone-50 text-stone-600 border border-stone-200' : 'bg-stone-900 text-white shadow-md'}`}>{m.text}</div>
@@ -2396,6 +2564,9 @@ const CafeMenu = ({ setView, selectedCafe, cart, setCart, db, auth, user }: any)
 
             {cart.length > 0 && !activeItem && (
                 <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-stone-50 via-stone-50/90 to-transparent z-30">
+                    {cart.reduce((s:any,i:any)=>s+i.price,0) < MIN_CART_TOTAL && (
+                        <p className="text-center text-xs text-amber-600 font-bold mb-2 max-w-md mx-auto">Min ${MIN_CART_TOTAL.toFixed(2)} order · Add ${(MIN_CART_TOTAL - cart.reduce((s:any,i:any)=>s+i.price,0)).toFixed(2)} more</p>
+                    )}
                     <button onClick={() => setView('checkout')} disabled={selectedCafe?.status !== 'open'} className={`w-full max-w-md mx-auto p-6 rounded-[2rem] font-bold flex justify-between items-center shadow-xl transition active:scale-[0.98] ${selectedCafe?.status === 'open' ? 'bg-stone-900 text-white hover:bg-stone-800' : 'bg-stone-300 text-stone-500 cursor-not-allowed'}`}>
                         <span className="bg-white/20 text-white px-4 py-2 rounded-xl text-xs font-black">{cart.length}</span>
                         <span className="text-[11px] uppercase tracking-widest ml-2">Review & Pay</span>
@@ -2419,7 +2590,9 @@ const Checkout = ({ setView, userProfile, setUserProfile, handlePlaceOrder, cart
 
     const fee = normalizeCurbsideFee(selectedCafe?.curbsideFee);
     const subtotal = cart.reduce((s:any,i:any)=>s+i.price,0);
-    const total = (subtotal + fee).toFixed(2);
+    const stripeFee = Math.ceil(((subtotal + fee) * 100 + 30) / (1 - 0.0175)) / 100 - (subtotal + fee);
+    const total = (subtotal + fee + stripeFee).toFixed(2);
+    const cartBelowMin = subtotal < MIN_CART_TOTAL;
 
     useEffect(() => {
         const saved = localStorage.getItem('pullup_profile');
@@ -2492,13 +2665,24 @@ const Checkout = ({ setView, userProfile, setUserProfile, handlePlaceOrder, cart
                     <div className="space-y-4 mb-6 pb-6 border-b border-stone-100">
                         {cart.map((i:any, idx:number) => (
                             <div key={idx} className="flex justify-between items-start text-sm text-stone-700">
-                                <div><span className="font-bold text-stone-900 block">{i.name}</span><span className="text-xs text-stone-500">{i.size}, {i.milk}</span>{i.notes && <span className="block text-xs text-orange-500 italic mt-1 font-medium">"{i.notes}"</span>}</div>
+                                <div><span className="font-bold text-stone-900 block">{i.name}</span><span className="text-xs text-stone-500">{i.size}, {i.milk}</span>{i.notes && <span className="block text-xs text-orange-500 italic mt-1 font-medium">&quot;{i.notes}&quot;</span>}</div>
                                 <span className="font-bold text-stone-900">${i.price.toFixed(2)}</span>
                             </div>
                         ))}
                     </div>
-                    <div className="flex justify-between text-sm mb-3 text-orange-500 font-bold uppercase tracking-widest"><span>Curbside Fee</span><span>${fee.toFixed(2)}</span></div>
+                    {cartBelowMin && (
+                        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-4">
+                            <p className="text-xs font-bold text-red-600">Minimum order of ${MIN_CART_TOTAL.toFixed(2)} required. Add ${(MIN_CART_TOTAL - subtotal).toFixed(2)} more to proceed.</p>
+                        </div>
+                    )}
+                    <div className="flex justify-between text-sm mb-2 text-stone-600"><span>Subtotal</span><span className="font-bold">${subtotal.toFixed(2)}</span></div>
+                    <div className="flex justify-between text-sm mb-2 text-orange-500 font-bold"><span>Curbside Fee</span><span>${fee.toFixed(2)}</span></div>
+                    <div className="flex justify-between text-sm mb-2 text-stone-400"><span>Payment Processing</span><span>${stripeFee.toFixed(2)}</span></div>
                     <div className="flex justify-between text-3xl font-serif font-bold text-stone-900 mt-6 pt-6 border-t border-stone-100 italic"><span>Total</span><span>${total}</span></div>
+                    <div className="mt-4 flex items-center gap-2 text-[10px] text-stone-400 uppercase tracking-widest">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                        Secure payment via Stripe · 256-bit encrypted
+                    </div>
                 </div>
 
                 <div className="mb-8 p-6 bg-stone-100 rounded-[1.5rem] text-sm flex gap-4 items-start shadow-inner border border-stone-200">
@@ -2509,7 +2693,7 @@ const Checkout = ({ setView, userProfile, setUserProfile, handlePlaceOrder, cart
 
             <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-stone-50 via-stone-50/90 to-transparent z-30">
                 <div className="max-w-md mx-auto">
-                    <button onClick={() => handlePlaceOrder(details, carPhoto, gpsEnabled)} disabled={!agreed || !userProfile.name || !userProfile.plate} className={`w-full py-5 rounded-[2rem] font-bold text-sm uppercase tracking-widest shadow-xl flex justify-center items-center gap-3 transition ${agreed && userProfile.name && userProfile.plate ? 'bg-stone-900 text-white active:scale-[0.98]' : 'bg-stone-300 text-stone-500 shadow-none'}`}>
+                    <button onClick={() => handlePlaceOrder(details, carPhoto, gpsEnabled)} disabled={!agreed || !userProfile.name || !userProfile.plate || cartBelowMin} className={`w-full py-5 rounded-[2rem] font-bold text-sm uppercase tracking-widest shadow-xl flex justify-center items-center gap-3 transition ${agreed && userProfile.name && userProfile.plate && !cartBelowMin ? 'bg-stone-900 text-white active:scale-[0.98]' : 'bg-stone-300 text-stone-500 shadow-none'}`}>
                         PAY & PULL UP
                     </button>
                 </div>
@@ -2685,6 +2869,13 @@ const Tracking = ({ setView, orderId, db, selectedCafe }: any) => {
                 {orderInfo.status !== 'completed' && gpsEnabledForOrder && hasCafeCoords && <p className="text-[10px] text-stone-300 font-bold uppercase tracking-widest mt-3">Live sharing starts automatically when you are within ~5 minutes or nearby distance.</p>}
             </div>
 
+            {(orderInfo.status === 'preparing' || orderInfo.status === 'ready') && !orderInfo.isArriving && (
+                <button disabled={sendingCurbside} onClick={() => sendCurbsideUpdate(true)} className="relative z-10 w-full max-w-sm mb-4 py-5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-[2rem] font-bold uppercase tracking-widest text-sm shadow-2xl hover:from-green-600 hover:to-green-700 transition active:scale-[0.97] disabled:opacity-50 flex items-center justify-center gap-3">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                    {sendingCurbside ? 'Notifying...' : "I'm Outside — Notify Cafe"}
+                </button>
+            )}
+
             {(orderInfo.status === 'preparing' || orderInfo.status === 'ready') && (
                 <div className="relative z-10 w-full max-w-sm mb-6 p-4 rounded-2xl border border-stone-700 bg-stone-800/70 text-left space-y-3">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-stone-300">Curbside Update to Cafe</p>
@@ -2816,16 +3007,36 @@ export default function App() {
         }
         const initAuth = async () => { try { await signInAnonymously(auth); } catch(e) { console.error("Guest Auth Failed"); } };
         initAuth();
-        return onAuthStateChanged(auth, async (u) => {
+        let unsubProfile: (() => void) | null = null;
+        const unsubAuth = onAuthStateChanged(auth, async (u) => {
             setUser(u as any);
+            // Clean up previous profile listener
+            if (unsubProfile) { unsubProfile(); unsubProfile = null; }
             if (u && !u.isAnonymous) {
-                const snap = await getDoc(doc(db, 'cafes', u.uid));
-                if (snap.exists()) { setCafeProfile(snap.data() as any); setDashboardInitialTab('orders'); setView('cafe-admin'); }
+                // Use live listener so approval changes propagate instantly — no page refresh needed
+                unsubProfile = onSnapshot(doc(db, 'cafes', u.uid), (snap) => {
+                    if (snap.exists()) {
+                        const data = snap.data() as any;
+                        setCafeProfile(data);
+                        if (data.isApproved) {
+                            setDashboardInitialTab('orders');
+                            setView('cafe-admin');
+                        } else {
+                            // Show pending approval message — keep on landing with alert
+                            setView('landing');
+                        }
+                    }
+                    setLoading(false);
+                });
             } else {
                 setCafeProfile(null);
+                setLoading(false);
             }
-            setLoading(false);
         });
+        return () => {
+            unsubAuth();
+            if (unsubProfile) unsubProfile();
+        };
     }, []);
 
     useEffect(() => {
@@ -2919,7 +3130,19 @@ export default function App() {
         }
     };
 
-    if (loading && isFirebaseAvailable) return <div className="min-h-screen bg-white flex items-center justify-center"><PullUpLogo className="animate-pulse-fast" /></div>;
+    if (loading && isFirebaseAvailable) return (
+        <div className="min-h-screen bg-white flex flex-col items-center justify-center gap-6">
+            <PullUpLogo className="animate-pulse-fast" />
+            <div className="flex flex-col items-center gap-3">
+                <div className="flex gap-1.5">
+                    <div className="w-2 h-2 bg-stone-300 rounded-full animate-bounce" style={{animationDelay: '0ms'}}></div>
+                    <div className="w-2 h-2 bg-stone-300 rounded-full animate-bounce" style={{animationDelay: '150ms'}}></div>
+                    <div className="w-2 h-2 bg-stone-300 rounded-full animate-bounce" style={{animationDelay: '300ms'}}></div>
+                </div>
+                <p className="text-[10px] uppercase tracking-[0.3em] text-stone-400 font-bold">Loading your experience</p>
+            </div>
+        </div>
+    );
 
     if (!isFirebaseAvailable) {
         return (
@@ -2938,12 +3161,13 @@ export default function App() {
             {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
             {activeModal && <LegalDocumentModal type={activeModal} onClose={() => setActiveModal(null)} />}
             {view === 'landing' && <LandingPage setView={setView} onAbout={() => setShowAbout(true)} openLegal={openLegal} />}
-            {view === 'merchant-auth' && <CafeAuth setView={setView} auth={auth} db={db} openLegal={openLegal} />}
+            {view === 'merchant-login' && <BusinessLogin setView={setView} auth={auth} openLegal={openLegal} />}
+            {view === 'merchant-signup' && <BusinessSignup setView={setView} auth={auth} db={db} openLegal={openLegal} />}
             {view === 'discovery' && <Discovery setView={setView} cafes={allCafes} onSelectCafe={(c:any) => { setSelectedCafe(c); setView('cafe-menu'); }} />}
             {view === 'cafe-menu' && <CafeMenu setView={setView} selectedCafe={selectedCafe} cart={cart} setCart={setCart} db={db} auth={auth} user={user} />}
             {view === 'checkout' && <Checkout setView={setView} userProfile={userProfile} setUserProfile={setUserProfile} handlePlaceOrder={handlePlaceOrder} cart={cart} selectedCafe={selectedCafe} />}
             {view === 'tracking' && <Tracking setView={setView} orderId={orderId} db={db} selectedCafe={selectedCafe} />}
-            {view === 'merch' && <MerchStore setView={setView} />}
+            {view === 'merch' && <SupportFounder setView={setView} />}
             {view === 'cafe-admin' && <CafeDashboard user={user} profile={cafeProfile} db={db} auth={auth} signOut={signOut} initialTab={dashboardInitialTab} />}
         </React.Fragment>
     );

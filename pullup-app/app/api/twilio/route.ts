@@ -8,6 +8,15 @@ const from = process.env.TWILIO_FROM_NUMBER;
 
 const client = sid && token ? twilio(sid, token) : null;
 
+// SMS hard-cap: max 2 SMS per orderId to control costs
+const ORDER_SMS_MAX = 2;
+const orderSmsCounts = new Map<string, number>();
+
+// Clean up stale entries every 30 minutes
+setInterval(() => {
+  if (orderSmsCounts.size > 5000) orderSmsCounts.clear();
+}, 30 * 60 * 1000);
+
 const normalizeAuNumber = (raw: string) => {
   const digits = raw.replace(/\s+/g, '').replace(/[^\d+]/g, '');
   if (digits.startsWith('+')) return digits;
@@ -27,14 +36,23 @@ export async function POST(req: Request) {
     const limited = checkRateLimit(req, 'twilio-send', 8, 60_000);
     if (limited) return limited;
 
-    const body = await parseJson<{ to: string; message: string }>(req);
+    const body = await parseJson<{ to: string; message: string; orderId?: string }>(req);
     if (!body) {
       return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 });
     }
 
-    const { to, message } = body;
+    const { to, message, orderId } = body;
     if (!to || !message) {
       return NextResponse.json({ success: false, error: 'Missing to/message' }, { status: 400 });
+    }
+
+    // Enforce per-order SMS hard-cap
+    if (orderId && typeof orderId === 'string') {
+      const currentCount = orderSmsCounts.get(orderId) || 0;
+      if (currentCount >= ORDER_SMS_MAX) {
+        return NextResponse.json({ success: false, error: `SMS limit reached for this order (max ${ORDER_SMS_MAX})`, capped: true }, { status: 429 });
+      }
+      orderSmsCounts.set(orderId, currentCount + 1);
     }
 
     if (typeof to !== 'string' || to.length < 8 || to.length > 20) {

@@ -1,0 +1,136 @@
+PULL UP COFFEE — GROK HANDOFF PROMPT (SECOND-PASS IMPROVEMENT)
+
+You are a senior startup product architect + legal-ops strategist + scaling engineer.
+Your task is to take an existing Gemini Deep Think output and improve it materially.
+Do not repeat generic advice. Be specific, practical, and implementation-ready.
+
+====================================================
+1) BUSINESS + PRODUCT CONTEXT
+====================================================
+Business: Pull Up Coffee Pty Ltd (Australia-first, then global)
+Core concept: Virtual drive-thru for cafes without requiring a physical drive-thru lane.
+Customer flow: parked customer orders via web, pays, and collects curbside.
+Merchant value: better margin profile vs major delivery marketplaces, faster queue handling, improved accessibility.
+
+Positioning themes:
+- Street parking is now your drive-thru
+- Accessibility + inclusion
+- Faster service + lower friction
+- Better economics for independent cafes
+
+====================================================
+2) CURRENT IMPLEMENTATION SNAPSHOT
+====================================================
+Frontend:
+- Next.js 16 App Router
+- Main experience in app/page.tsx
+- React 19 + TypeScript strict mode
+- Tailwind v4
+
+Backend/API:
+- Next API routes under app/api
+- Firebase (Auth + Firestore)
+- Firebase Admin for server-side admin operations
+- Stripe (checkout + connect + capture/cancel/confirm)
+- Twilio SMS API route
+- Route security: origin checks + JSON content-type checks + in-memory rate limiting
+
+Security:
+- Access gate cookie with HMAC signature
+- Proxy route lock for non-access routes
+- Admin token auth for admin endpoints
+- CSP + HSTS + secure headers in next.config
+- ALLOWED_ORIGINS + inferred Vercel fallback logic
+
+Ops direction:
+- Wants automation-first operation with low founder overhead
+- Wants clear controls for anti-fraud, abuse prevention, and business verification
+
+====================================================
+3) KEY BUSINESS/OPS LOGIC TO CONSIDER
+====================================================
+- Dynamic curbside fee model
+- Early adopter economics path + later sustainability model
+- Merchant payout preference fields (daily/weekly/fortnightly) in UI context
+- Affiliate incentive logic exists in legal/support content and SOP notes
+- GPS discovery + radius logic + suburb/postcode UX (recently improved)
+- Tracking flow includes movement thresholds and automatic arrival/updates behavior
+- Twilio used for selected operational notifications, with simulated fallback when creds absent
+
+====================================================
+4) DOCUMENTS AVAILABLE IN PROJECT (REFERENCE CONTEXT)
+====================================================
+- docs/SYSTEM-WEB-TREE.md
+- docs/BusinessPlanning.md
+- docs/MarketingPlan.md
+- docs/OperationalMonitoring.md
+- docs/SOPs.md
+- docs/Legal-Policy-Pages-Checklist.md
+- docs/Founder-Legal-IP-Protection-Playbook-AU-Global.md
+- docs/ProductionLaunchChecklist.md
+- docs/AU-Launch-Checklists/01-AU-Launch-GoLive-Checklist.md
+
+Code references:
+- app/page.tsx
+- app/api/**
+- app/api/_lib/**
+- lib/accessLock.ts
+- proxy.ts
+- next.config.ts
+
+====================================================
+5) WHAT I NEED FROM YOU NOW (SECOND-PASS)
+====================================================
+I already got a Gemini Deep Think answer.
+You must improve it, tighten it, and remove weak/generalized recommendations.
+
+Required output sections:
+1. Executive Reality Check
+2. Priority Matrix (Critical / High / Medium / Low)
+3. Product/UX upgrades (mobile-first, old-device-friendly)
+4. GPS/discovery and checkout/payment trust flow improvements
+5. Security + abuse prevention hardening roadmap
+6. Legal policy rewrite quality control (AU-first), including liability boundaries and platform-role clarity
+7. Unit economics and sustainability stress test (conservative/base/aggressive)
+8. App-store path (PWA vs RN/Expo vs wrapper) with recommendation + milestones
+9. Operations automation model (founder-light)
+10. 30/60/90 day execution plan with measurable KPIs and go/no-go gates
+
+For each recommendation provide:
+- Why this matters
+- Effort estimate (S/M/L)
+- Impact estimate (Low/Med/High)
+- Dependencies
+- Acceptance criteria
+
+====================================================
+6) QUALITY BAR
+====================================================
+- Assume founder needs practical, copy/paste-ready guidance.
+- No fluff.
+- Flag contradictions between strategy, legal position, and code reality.
+- Call out high-risk assumptions explicitly.
+- Provide decision trees where there is uncertainty.
+
+====================================================
+7) INPUTS FOR YOU TO ANALYZE
+====================================================
+A) ORIGINAL MASTER PROMPT (used with Gemini):
+
+[PASTE MASTER PROMPT HERE]
+
+B) GEMINI RESPONSE (to improve):
+
+[PASTE GEMINI RESPONSE HERE]
+
+====================================================
+8) FINAL INSTRUCTION
+====================================================
+Produce a better version than Gemini’s output, optimized for:
+- founder speed,
+- legal defensibility,
+- secure and scalable operations,
+- premium UX,
+- realistic profitability.
+
+End with a compact "Week 1 Implementation Pack" that can be executed in VS Code immediately.

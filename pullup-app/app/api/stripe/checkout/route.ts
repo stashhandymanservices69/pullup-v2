@@ -53,14 +53,33 @@ export async function POST(req: Request) {
     }));
 
     // Dynamic Pull Up Curbside Fee
+    const curbsideFeeAmount = Math.round((fee || 2) * 100);
     lineItems.push({
       price_data: {
         currency: 'aud',
         product_data: { name: 'Pull Up Curbside Fee' },
-        unit_amount: Math.round((fee || 2) * 100), 
+        unit_amount: curbsideFeeAmount, 
       },
       quantity: 1,
     });
+
+    // Dynamic Pass-Through: calculate Stripe processing fee and add as line item
+    // Formula: TotalCharge = ceil((subtotal + fee + 30) / (1 - 0.0175))
+    // This ensures the cafe receives their full menu price and the customer pays the processing cost
+    const subtotalCents = lineItems.reduce((sum, item) => sum + item.price_data.unit_amount * item.quantity, 0);
+    const totalWithProcessing = Math.ceil((subtotalCents + 30) / (1 - 0.0175));
+    const processingFeeCents = totalWithProcessing - subtotalCents;
+
+    if (processingFeeCents > 0) {
+      lineItems.push({
+        price_data: {
+          currency: 'aud',
+          product_data: { name: 'Payment Processing (Stripe)' },
+          unit_amount: processingFeeCents,
+        },
+        quantity: 1,
+      });
+    }
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
