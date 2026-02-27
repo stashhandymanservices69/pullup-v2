@@ -35,7 +35,11 @@ const SMS_TEMPLATES: Record<string, (ctx: Record<string, string>) => string> = {
   'order-accepted':  (ctx) => `Pull Up Coffee: Great news! ${ctx.cafeName || 'Your cafe'} accepted your order. Heading your way.`.trim(),
   'order-declined':  (ctx) => `Pull Up Coffee: Sorry, ${ctx.cafeName || 'the cafe'} couldn't fulfill your order. Your hold has been released.`.trim(),
   'cafe-open':       (ctx) => `Pull Up Coffee: ${ctx.cafeName || 'A favourite cafe'} just opened! Order now for curbside pickup.`.trim(),
+  'cafe-approved':   (ctx) => `Pull Up Coffee: Great news! ${ctx.businessName || 'Your business'} has been approved! Log in at pullupcoffee.com.au to set up your menu and go live. Welcome aboard! ☕🚗`.trim(),
 };
+
+// Export SMS templates & helpers for server-side use (e.g. admin approve route)
+export { SMS_TEMPLATES, normalizeAuNumber, AU_MOBILE_RE };
 
 export async function POST(req: Request) {
   try {
