@@ -736,42 +736,16 @@ const LandingPage = ({ setView, onAbout, openLegal }: any) => (
                             <li><button onClick={() => openLegal('faq')} className="hover:text-orange-400 transition">FAQ</button></li>
                             <li><button onClick={() => openLegal('contact')} className="hover:text-orange-400 transition">Contact Us</button></li>
                             <li><button onClick={() => setView('merch')} className="hover:text-orange-400 transition">Support the Founder</button></li>
+                            <li><a href="https://instagram.com/pullupcoffee.com.au" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 hover:text-orange-400 transition"><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>Instagram</a></li>
                         </ul>
                     </div>
                     <div>
                         <h4 className="font-bold text-stone-300 mb-2.5 sm:mb-4 text-[10px] uppercase tracking-widest">Earn</h4>
                         <ul className="space-y-1.5 sm:space-y-3 text-[11px] sm:text-[10px] font-medium">
                             <li><button onClick={() => openLegal('affiliate')} className="text-orange-400 hover:text-orange-300 transition font-bold">Affiliate (25% first month)</button></li>
+                            <li><a href="https://pullupglobal.com.au" target="_blank" rel="noopener noreferrer" className="text-stone-400 hover:text-orange-400 transition">Not food? Pull Up Global →</a></li>
                         </ul>
                     </div>
-                </div>
-
-                {/* Instagram + Social */}
-                <div className="flex items-center justify-center gap-4 mb-4">
-                    <a href="https://instagram.com/pullupcoffee.com.au" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-stone-400 hover:text-orange-400 transition text-[10px] uppercase tracking-widest font-bold">
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
-                        @pullupcoffee.com.au
-                    </a>
-                </div>
-
-                {/* Pull Up Global teaser */}
-                <div className="flex items-center justify-center mb-4">
-                    <a href="https://pullupglobal.com.au" target="_blank" rel="noopener noreferrer" className="group flex items-center gap-2.5 px-4 py-2.5 rounded-full border border-white/10 hover:border-stone-500/40 bg-white/[0.03] hover:bg-white/[0.06] transition-all">
-                        <div className="w-5 h-5 bg-stone-700 rounded-full flex items-center justify-center shrink-0">
-                            <svg viewBox="0 0 100 100" className="w-full h-full p-1 text-white fill-none stroke-current" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M 24 36 L 74 36 A 2 2 0 0 1 76 38 L 76 46" />
-                                <path d="M 22 42 C 40 42 45 42 55 50 C 62 55 72 55 76 50" />
-                                <path d="M 76 46 C 76 60 72 66 68 66" />
-                                <path d="M 32 66 L 68 66" />
-                                <circle cx="38" cy="66" r="6" />
-                                <circle cx="38" cy="66" r="2" />
-                                <circle cx="62" cy="66" r="6" />
-                                <circle cx="62" cy="66" r="2" />
-                            </svg>
-                        </div>
-                        <span className="text-stone-500 group-hover:text-stone-300 text-[10px] uppercase tracking-widest font-bold transition">Not food? Pull Up Global — curbside for everything</span>
-                        <svg className="w-3 h-3 text-stone-600 group-hover:text-orange-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/></svg>
-                    </a>
                 </div>
 
                 <div className="text-center text-[10px] text-stone-500">
