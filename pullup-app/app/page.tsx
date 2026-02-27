@@ -4,16 +4,10 @@
 import React, { useState, useEffect, useRef, Fragment, useCallback } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, onSnapshot, query, doc, updateDoc, deleteDoc, setDoc, getDoc, getDocs, where } from 'firebase/firestore';
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, signInAnonymously, sendPasswordResetEmail } from 'firebase/auth';
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import ReCAPTCHA from 'react-google-recaptcha';
 
 const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || '';
-
-/** Hash a string with SHA-256 (browser-native). Returns hex string. */
-const sha256 = async (input: string): Promise<string> => {
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-};
 
 // --- SECURE CONFIGURATION ---
 const firebaseConfig = {

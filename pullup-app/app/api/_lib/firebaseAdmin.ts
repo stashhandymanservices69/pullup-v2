@@ -10,28 +10,43 @@ type ServiceAccount = {
 };
 
 const getServiceAccount = (): FirebaseServiceAccount => {
+  // Strategy 1: Full JSON blob (FIREBASE_ADMIN_SDK_JSON)
   const json = process.env.FIREBASE_ADMIN_SDK_JSON;
-  const base64 = process.env.FIREBASE_ADMIN_SDK_BASE64;
-  let parsed: ServiceAccount;
-
   if (json) {
-    parsed = JSON.parse(json) as ServiceAccount;
-  } else if (base64) {
+    const parsed = JSON.parse(json) as ServiceAccount;
+    if (parsed.project_id && parsed.client_email && parsed.private_key) {
+      return { projectId: parsed.project_id, clientEmail: parsed.client_email, privateKey: parsed.private_key };
+    }
+  }
+
+  // Strategy 2: Base64-encoded JSON (FIREBASE_ADMIN_SDK_BASE64)
+  const base64 = process.env.FIREBASE_ADMIN_SDK_BASE64;
+  if (base64) {
     const decoded = Buffer.from(base64, 'base64').toString('utf8');
-    parsed = JSON.parse(decoded) as ServiceAccount;
-  } else {
-    throw new Error('Missing FIREBASE_ADMIN_SDK_JSON or FIREBASE_ADMIN_SDK_BASE64');
+    const parsed = JSON.parse(decoded) as ServiceAccount;
+    if (parsed.project_id && parsed.client_email && parsed.private_key) {
+      return { projectId: parsed.project_id, clientEmail: parsed.client_email, privateKey: parsed.private_key };
+    }
   }
 
-  if (!parsed.project_id || !parsed.client_email || !parsed.private_key) {
-    throw new Error('Invalid Firebase service account: missing project_id, client_email, or private_key');
+  // Strategy 3: Individual env vars (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY)
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+  if (projectId && clientEmail && privateKey) {
+    // Vercel/env files sometimes escape newlines as literal \n — fix them
+    if (privateKey.includes('\\n')) {
+      privateKey = privateKey.replace(/\\n/g, '\n');
+    }
+    return { projectId, clientEmail, privateKey };
   }
 
-  return {
-    projectId: parsed.project_id,
-    clientEmail: parsed.client_email,
-    privateKey: parsed.private_key,
-  };
+  throw new Error(
+    'Missing Firebase Admin credentials. Set one of: ' +
+    'FIREBASE_ADMIN_SDK_JSON, FIREBASE_ADMIN_SDK_BASE64, or ' +
+    'individual FIREBASE_PROJECT_ID + FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY'
+  );
 };
 
 let cachedApp: App | null = null;
