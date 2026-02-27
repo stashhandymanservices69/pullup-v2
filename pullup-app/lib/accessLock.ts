@@ -1,5 +1,5 @@
 const ACCESS_COOKIE_NAME = 'pullup_launch_access';
-const ACCESS_TTL_SECONDS = 60 * 60 * 24 * 14;
+const ACCESS_TTL_SECONDS = 60 * 60 * 3; // 3 hours
 
 const isProduction = process.env.NODE_ENV === 'production';
 
