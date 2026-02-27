@@ -7,6 +7,8 @@ import { NextResponse } from 'next/server';
  * ──────────────────────────────────────────────────────────────────── */
 
 const HARDCODED_PRODUCTION_ORIGINS: readonly string[] = [
+  'https://pullupcoffee.com',
+  'https://www.pullupcoffee.com',
   'https://pullupcoffee.com.au',
   'https://www.pullupcoffee.com.au',
 ];

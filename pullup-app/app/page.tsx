@@ -30,6 +30,15 @@ const app: any = (typeof window !== 'undefined' && hasFirebaseConfig) ? initiali
 const db: any = app ? getFirestore(app) : null;
 const auth: any = app ? getAuth(app) : null;
 
+/** Get Firebase ID token for authenticated API calls */
+const getAuthToken = async (): Promise<string | null> => {
+    try {
+        const currentUser = auth?.currentUser;
+        if (!currentUser) return null;
+        return await currentUser.getIdToken(true);
+    } catch { return null; }
+};
+
 // --- GLOBAL STYLES ---
 const GlobalStyles = () => (
     <style>
@@ -128,16 +137,20 @@ const stopPendingOrderAlert = () => {
     if (_pendingAlertInterval) { clearInterval(_pendingAlertInterval); _pendingAlertInterval = null; }
 };
 
-// --- SMS ENGINE (Twilio Hook) ---
-const sendSMS = async (mobile: string, message: string) => {
-    if (!mobile) return;
+// --- SMS ENGINE (Twilio Hook — uses server-side templates) ---
+const sendSMS = async (to: string, template: string, context?: Record<string, string>, orderId?: string) => {
+    if (!to) return;
     try {
+        const token = await getAuthToken();
         await fetch('/api/twilio', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ to: mobile, message: message })
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ to, template, context: context || {}, orderId })
         });
-    } catch (e) { console.error("SMS Hook failed - check backend API"); }
+    } catch (e) { console.error('SMS send failed:', e); }
 };
 
 const DEFAULT_MENU_ITEMS = [
@@ -765,39 +778,60 @@ const LandingPage = ({ setView, onAbout, openLegal }: any) => (
     </div>
 );
 
-/** Inline component for setting a new Security PIN in merchant dashboard */
-const SecurityPinSetup = ({ userId, db }: { userId: string; db: any }) => {
-    const [pin, setPin] = useState('');
-    const [confirmPin, setConfirmPin] = useState('');
-    const [saving, setSaving] = useState(false);
+/** Inline component for SMS Two-Factor Authentication toggle in merchant dashboard */
+const Sms2faToggle = ({ userId, db, profile }: { userId: string; db: any; profile: any }) => {
+    const [enabling, setEnabling] = useState(false);
+    const isEnabled = Boolean(profile?.sms2faEnabled);
+    const hasPhone = Boolean(profile?.phone);
 
-    const handleSetPin = async () => {
-        if (pin.length < 4) { alert('PIN must be at least 4 digits.'); return; }
-        if (pin !== confirmPin) { alert('PINs do not match.'); return; }
-        setSaving(true);
+    const toggle2fa = async () => {
+        if (!hasPhone) {
+            alert('Please add a mobile number to your account before enabling SMS 2FA.');
+            return;
+        }
+        setEnabling(true);
         try {
-            const hash = await sha256(pin);
-            await updateDoc(doc(db, 'cafes', userId), { securityPinHash: hash });
-            alert('Security PIN set! You\'ll need this PIN on every future login.');
-            setPin(''); setConfirmPin('');
-        } catch { alert('Failed to save PIN.'); }
-        finally { setSaving(false); }
+            await updateDoc(doc(db, 'cafes', userId), { sms2faEnabled: !isEnabled });
+            alert(isEnabled ? 'SMS Two-Factor Authentication disabled.' : 'SMS Two-Factor Authentication enabled! You\u2019ll receive a 6-digit code via SMS on every login.');
+        } catch { alert('Failed to update 2FA setting.'); }
+        finally { setEnabling(false); }
     };
 
     return (
         <div className="space-y-3">
-            <div>
-                <label className="block text-[10px] font-bold uppercase tracking-widest text-stone-500 mb-1.5">New PIN (4-8 digits)</label>
-                <input type="password" inputMode="numeric" maxLength={8} value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))} placeholder="••••" className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:border-orange-500 transition text-stone-900 font-medium text-center text-xl tracking-[0.4em]" />
-            </div>
-            <div>
-                <label className="block text-[10px] font-bold uppercase tracking-widest text-stone-500 mb-1.5">Confirm PIN</label>
-                <input type="password" inputMode="numeric" maxLength={8} value={confirmPin} onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))} placeholder="••••" className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:border-orange-500 transition text-stone-900 font-medium text-center text-xl tracking-[0.4em]" />
-            </div>
-            <button disabled={saving || pin.length < 4} onClick={handleSetPin} className="w-full bg-orange-600 text-white p-3 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-orange-500 transition disabled:opacity-50">
-                {saving ? 'Setting PIN...' : 'Set Security PIN'}
-            </button>
-            <p className="text-[9px] text-stone-400 italic text-center">Once set, you will be asked for this PIN every time you log in. Keep it safe — support cannot recover it.</p>
+            {isEnabled ? (
+                <div className="space-y-3">
+                    <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl p-3">
+                        <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-green-700">SMS 2FA is Active</p>
+                    </div>
+                    <p className="text-[9px] text-stone-500 italic text-center">A 6-digit code will be sent to your registered mobile number ({profile?.phone || 'not set'}) on every login.</p>
+                    <button
+                        disabled={enabling}
+                        onClick={toggle2fa}
+                        className="w-full bg-red-50 text-red-600 border border-red-200 p-3 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-red-100 transition disabled:opacity-50"
+                    >
+                        {enabling ? 'Updating...' : 'Disable SMS 2FA'}
+                    </button>
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    <p className="text-sm text-stone-600">When enabled, a unique 6-digit verification code will be sent to your registered mobile number every time you log in. This ensures only someone with access to your phone can access your dashboard.</p>
+                    {!hasPhone && (
+                        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700">Add a mobile number to your account first</p>
+                        </div>
+                    )}
+                    <button
+                        disabled={enabling || !hasPhone}
+                        onClick={toggle2fa}
+                        className="w-full bg-orange-600 text-white p-3 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-orange-500 transition disabled:opacity-50"
+                    >
+                        {enabling ? 'Enabling...' : 'Enable SMS 2FA'}
+                    </button>
+                    <p className="text-[9px] text-stone-400 italic text-center">Your verification code changes every login and expires after 5 minutes. Standard SMS rates may apply.</p>
+                </div>
+            )}
         </div>
     );
 };
@@ -807,10 +841,14 @@ const BusinessLogin = ({ setView, auth, openLegal }: any) => {
     const [pass, setPass] = useState('');
     const [loadingAuth, setLoadingAuth] = useState(false);
     const [captchaToken, setCaptchaToken] = useState<string | null>(null);
-    const [pinChallenge, setPinChallenge] = useState(false);
-    const [pinInput, setPinInput] = useState('');
-    const [pinHash, setPinHash] = useState<string | null>(null);
-    const [pinAttempts, setPinAttempts] = useState(0);
+    const [otpChallenge, setOtpChallenge] = useState(false);
+    const [otpInput, setOtpInput] = useState('');
+    const [otpCafeId, setOtpCafeId] = useState<string | null>(null);
+    const [otpAttempts, setOtpAttempts] = useState(0);
+    const [otpSending, setOtpSending] = useState(false);
+    const [forgotMode, setForgotMode] = useState(false);
+    const [forgotEmail, setForgotEmail] = useState('');
+    const [forgotSent, setForgotSent] = useState(false);
     const captchaRef = useRef<any>(null);
     const captchaEnabled = Boolean(RECAPTCHA_SITE_KEY);
 
@@ -823,19 +861,43 @@ const BusinessLogin = ({ setView, auth, openLegal }: any) => {
         setLoadingAuth(true);
         try {
             const cred = await signInWithEmailAndPassword(auth, email, pass);
-            // Check if merchant has a Security PIN set
             const db = getFirestore();
             const cafeDoc = await getDoc(doc(db, 'cafes', cred.user.uid));
-            if (cafeDoc.exists() && cafeDoc.data()?.securityPinHash) {
-                // PIN is set — need 2FA challenge
-                setPinHash(cafeDoc.data().securityPinHash);
-                setPinChallenge(true);
+            if (cafeDoc.exists() && cafeDoc.data()?.sms2faEnabled) {
+                // SMS 2FA is enabled — send OTP to their mobile
+                setOtpSending(true);
+                try {
+                    const token = await cred.user.getIdToken();
+                    const res = await fetch('/api/auth/send-2fa', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`,
+                        },
+                    });
+                    const data = await res.json();
+                    if (!res.ok) {
+                        alert(data.error || 'Failed to send verification code.');
+                        await signOut(auth);
+                        setLoadingAuth(false);
+                        setOtpSending(false);
+                        return;
+                    }
+                } catch {
+                    alert('Unable to send verification code. Please try again.');
+                    await signOut(auth);
+                    setLoadingAuth(false);
+                    setOtpSending(false);
+                    return;
+                }
+                setOtpCafeId(cred.user.uid);
+                setOtpChallenge(true);
+                setOtpSending(false);
                 setLoadingAuth(false);
-                // Sign out temporarily — only let them in after PIN
                 await signOut(auth);
                 return;
             }
-            // No PIN, login complete
+            // No 2FA, login complete — onAuthStateChanged will redirect
         } catch (err: any) {
             alert(err.message.replace('Firebase: ', '').replace('Error ', ''));
             captchaRef.current?.reset();
@@ -845,34 +907,63 @@ const BusinessLogin = ({ setView, auth, openLegal }: any) => {
         }
     };
 
-    const verifyPin = async () => {
-        if (!pinInput.trim()) return;
-        const hash = await sha256(pinInput.trim());
-        if (hash === pinHash) {
-            // PIN correct — re-authenticate
-            setLoadingAuth(true);
-            try {
-                await signInWithEmailAndPassword(auth, email, pass);
-            } catch (err: any) {
-                alert('Session error. Please log in again.');
-                setPinChallenge(false);
-                setPinInput('');
-            } finally {
+    const verifyOtp = async () => {
+        if (!otpInput.trim() || otpInput.length !== 6 || !otpCafeId) return;
+        setLoadingAuth(true);
+        try {
+            const res = await fetch('/api/auth/verify-2fa', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cafeId: otpCafeId, code: otpInput.trim() }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.verified) {
+                const next = otpAttempts + 1;
+                setOtpAttempts(next);
+                setOtpInput('');
+                if (next >= 3) {
+                    alert('Too many incorrect attempts. Please log in again to receive a new code.');
+                    setOtpChallenge(false);
+                    setOtpAttempts(0);
+                    setOtpCafeId(null);
+                    captchaRef.current?.reset();
+                    setCaptchaToken(null);
+                } else {
+                    alert(data.error || `Incorrect code. ${3 - next} attempt(s) remaining.`);
+                }
                 setLoadingAuth(false);
+                return;
             }
-        } else {
-            const next = pinAttempts + 1;
-            setPinAttempts(next);
-            setPinInput('');
-            if (next >= 3) {
-                alert('Too many incorrect PIN attempts. Please try again.');
-                setPinChallenge(false);
-                setPinAttempts(0);
-                captchaRef.current?.reset();
-                setCaptchaToken(null);
+            // OTP verified — re-authenticate to enter dashboard
+            await signInWithEmailAndPassword(auth, email, pass);
+            // onAuthStateChanged will handle redirect to dashboard
+        } catch (err: any) {
+            alert('Verification failed. Please try again.');
+            setOtpInput('');
+        } finally {
+            setLoadingAuth(false);
+        }
+    };
+
+    const handleForgotPassword = async (e: any) => {
+        e.preventDefault();
+        if (!forgotEmail.trim()) return;
+        setLoadingAuth(true);
+        try {
+            const res = await fetch('/api/auth/reset-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: forgotEmail.trim() }),
+            });
+            if (res.ok) {
+                setForgotSent(true);
             } else {
-                alert(`Incorrect PIN. ${3 - next} attempt(s) remaining.`);
+                alert('Unable to send reset email. Please try again.');
             }
+        } catch {
+            alert('Network error. Please try again.');
+        } finally {
+            setLoadingAuth(false);
         }
     };
 
@@ -895,22 +986,59 @@ const BusinessLogin = ({ setView, auth, openLegal }: any) => {
                     <h2 className="text-2xl font-serif italic font-bold mb-1 text-white">Business Login</h2>
                     <p className="text-stone-500 text-[10px] uppercase tracking-[0.2em] mb-8 font-bold">Partner Dashboard Access</p>
                     
-                    {pinChallenge ? (
+                    {otpChallenge ? (
                         <div className="space-y-5">
                             <div className="text-center mb-2">
                                 <div className="w-14 h-14 mx-auto mb-4 bg-orange-500/20 rounded-full flex items-center justify-center">
-                                    <svg className="w-7 h-7 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                                    <svg className="w-7 h-7 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
                                 </div>
-                                <p className="text-white font-bold text-lg">Security PIN Required</p>
-                                <p className="text-stone-400 text-xs mt-1">Enter your 4–8 digit Security PIN to continue.</p>
+                                <p className="text-white font-bold text-lg">SMS Verification</p>
+                                <p className="text-stone-400 text-xs mt-1">We sent a 6-digit code to your registered mobile. Enter it below.</p>
                             </div>
-                            <input type="password" inputMode="numeric" maxLength={8} value={pinInput} onChange={e => setPinInput(e.target.value.replace(/\D/g, ''))} placeholder="Enter PIN" className="w-full p-4 bg-[#0f0f0f] border border-stone-800 rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium text-center text-2xl tracking-[0.5em]" autoFocus />
-                            <button onClick={verifyPin} disabled={loadingAuth || pinInput.length < 4} className="w-full bg-orange-600 text-white py-5 rounded-2xl font-bold hover:bg-orange-500 disabled:opacity-50 transition-all active:scale-95 uppercase tracking-widest text-sm">
-                                {loadingAuth ? 'Verifying...' : 'VERIFY PIN'}
+                            <input type="text" inputMode="numeric" maxLength={6} value={otpInput} onChange={e => setOtpInput(e.target.value.replace(/\D/g, ''))} placeholder="000000" className="w-full p-4 bg-[#0f0f0f] border border-stone-800 rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium text-center text-2xl tracking-[0.5em]" autoFocus />
+                            <button onClick={verifyOtp} disabled={loadingAuth || otpInput.length !== 6} className="w-full bg-orange-600 text-white py-5 rounded-2xl font-bold hover:bg-orange-500 disabled:opacity-50 transition-all active:scale-95 uppercase tracking-widest text-sm">
+                                {loadingAuth ? 'Verifying...' : 'VERIFY CODE'}
                             </button>
-                            <button onClick={() => { setPinChallenge(false); setPinInput(''); setPinAttempts(0); }} className="w-full text-stone-500 text-[10px] uppercase tracking-widest font-bold hover:text-stone-300 transition py-2">
-                                ← Back to Login
+                            <p className="text-[9px] text-stone-500 text-center">Code expires in 5 minutes. Didn&apos;t receive it? Go back and try again.</p>
+                            <button onClick={() => { setOtpChallenge(false); setOtpInput(''); setOtpAttempts(0); setOtpCafeId(null); }} className="w-full text-stone-500 text-[10px] uppercase tracking-widest font-bold hover:text-stone-300 transition py-2">
+                                &larr; Back to Login
                             </button>
+                        </div>
+                    ) : forgotMode ? (
+                        <div className="space-y-5">
+                            <div className="text-center mb-2">
+                                <div className="w-14 h-14 mx-auto mb-4 bg-orange-500/20 rounded-full flex items-center justify-center">
+                                    <svg className="w-7 h-7 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                                </div>
+                                <p className="text-white font-bold text-lg">{forgotSent ? 'Check Your Inbox' : 'Reset Password'}</p>
+                                <p className="text-stone-400 text-xs mt-1">{forgotSent ? 'If an account exists, we\u2019ve sent a password reset link.' : 'Enter your email and we\u2019ll send a reset link.'}</p>
+                            </div>
+                            {forgotSent ? (
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-2 bg-green-900/30 border border-green-700/50 rounded-xl p-4">
+                                        <svg className="w-5 h-5 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                        <p className="text-sm text-green-300">Reset link sent! Check your inbox (and spam folder).</p>
+                                    </div>
+                                    <button onClick={() => { setForgotMode(false); setForgotSent(false); setForgotEmail(''); }} className="w-full bg-orange-600 text-white py-4 rounded-2xl font-bold hover:bg-orange-500 transition-all uppercase tracking-widest text-sm">
+                                        BACK TO LOGIN
+                                    </button>
+                                </div>
+                            ) : (
+                                <form onSubmit={handleForgotPassword} className="space-y-4">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-2">Email Address</label>
+                                        <input type="email" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} placeholder="your@cafe.com" className="w-full p-4 bg-[#0f0f0f] border border-stone-800 rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium" required />
+                                    </div>
+                                    <button type="submit" disabled={loadingAuth} className="w-full bg-orange-600 text-white py-5 rounded-2xl font-bold hover:bg-orange-500 disabled:opacity-50 transition-all active:scale-95 uppercase tracking-widest text-sm">
+                                        {loadingAuth ? 'Sending...' : 'SEND RESET LINK'}
+                                    </button>
+                                </form>
+                            )}
+                            {!forgotSent && (
+                                <button onClick={() => { setForgotMode(false); setForgotEmail(''); }} className="w-full text-stone-500 text-[10px] uppercase tracking-widest font-bold hover:text-stone-300 transition py-2">
+                                    &larr; Back to Login
+                                </button>
+                            )}
                         </div>
                     ) : (
                     <form onSubmit={handleLogin} className="space-y-5">
@@ -928,7 +1056,10 @@ const BusinessLogin = ({ setView, auth, openLegal }: any) => {
                             </div>
                         )}
                         <button type="submit" disabled={loadingAuth || (captchaEnabled && !captchaToken)} className="w-full bg-orange-600 text-white py-5 rounded-2xl font-bold mt-4 hover:bg-orange-500 disabled:opacity-50 transition-all active:scale-95 uppercase tracking-widest text-sm shadow-[0_0_12px_rgba(249,115,22,0.25)]">
-                            {loadingAuth ? 'Signing In...' : 'SIGN IN'}
+                            {loadingAuth ? (otpSending ? 'Sending Code...' : 'Signing In...') : 'SIGN IN'}
+                        </button>
+                        <button type="button" onClick={() => setForgotMode(true)} className="w-full text-stone-500 text-[10px] uppercase tracking-widest font-bold hover:text-orange-400 transition py-1">
+                            Forgot Password?
                         </button>
                     </form>
                     )}
@@ -936,7 +1067,7 @@ const BusinessLogin = ({ setView, auth, openLegal }: any) => {
                     <div className="mt-8 pt-6 border-t border-stone-800 text-center">
                         <p className="text-stone-500 text-[10px] uppercase tracking-widest mb-4">New to Pull Up?</p>
                         <button onClick={() => setView('merchant-signup')} className="text-orange-500 font-bold text-sm uppercase tracking-widest hover:text-orange-400 transition">
-                            → APPLY TO JOIN
+                            &rarr; APPLY TO JOIN
                         </button>
                     </div>
 
@@ -1031,7 +1162,21 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
                     active: true,
                 });
             }
-            alert("Application sent! We will notify you once approved. You can now log in.");
+
+            // Send signup confirmation email via Resend (fire-and-forget)
+            try {
+                const token = await res.user.getIdToken();
+                await fetch('/api/auth/signup-notify', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ businessName: bizName, email }),
+                });
+            } catch (e) { console.error('Signup notification failed:', e); }
+
+            alert("Application sent! We'll review your details and notify you once approved (usually within 24 hours). Check your email for a confirmation.");
             await signOut(auth);
             setView('merchant-login');
         } catch (err: any) {
@@ -1686,10 +1831,18 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
 
     const connectStripeOnboarding = async () => {
         try {
-            const res = await fetch('/api/stripe/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: profile?.email, businessName: profile?.businessName, cafeId: user?.uid, referralCode: 'SCOUT_001' }) });
+            const token = await getAuthToken();
+            const res = await fetch('/api/stripe/connect', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({ email: profile?.email, businessName: profile?.businessName, cafeId: user?.uid, referralCode: 'SCOUT_001' })
+            });
             const data = await res.json();
             if (data.url) window.location.href = data.url;
-            else alert('Error: ' + data.error);
+            else alert('Error: ' + (data.error || 'Unable to connect Stripe'));
         } catch (err) {
             alert('Network error connecting to Stripe.');
         }
@@ -1702,11 +1855,18 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
         }
         setAccountBusy(true);
         try {
-            await sendPasswordResetEmail(auth, profile.email);
-            alert(`Password reset email sent to ${profile.email}`);
+            const res = await fetch('/api/auth/reset-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: profile.email }),
+            });
+            if (res.ok) {
+                alert(`Password reset email sent to ${profile.email}. Check your inbox (and spam folder).`);
+            } else {
+                alert('Unable to send reset email. Please try again.');
+            }
         } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : 'Unable to send reset email';
-            alert(message.replace('Firebase: ', '').replace('Error ', ''));
+            alert('Network error. Please try again.');
         } finally {
             setAccountBusy(false);
         }
@@ -1845,9 +2005,13 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                                     {o.status === 'pending' ? (
                                         <button onClick={async () => { 
                                             if (o.paymentIntentId) {
+                                                const token = await getAuthToken();
                                                 const captureRes = await fetch('/api/stripe/capture', {
                                                     method: 'POST',
-                                                    headers: { 'Content-Type': 'application/json' },
+                                                    headers: {
+                                                        'Content-Type': 'application/json',
+                                                        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                                                    },
                                                     body: JSON.stringify({ paymentIntentId: o.paymentIntentId })
                                                 });
                                                 const captureData = await captureRes.json();
@@ -1862,16 +2026,20 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                                                 statusNote: `${profile?.businessName || 'Cafe'} accepted your order and started preparation.`,
                                                 statusUpdatedAt: new Date().toISOString()
                                             });
-                                            if (o.mobile) sendSMS(o.mobile, `Pull Up Coffee: ${profile?.businessName || 'Your cafe'} accepted your order and is preparing it now.`);
+                                            if (o.mobile) sendSMS(o.mobile, 'order-accepted', { cafeName: profile?.businessName || 'Your cafe' }, o.id);
                                         }} className="flex-1 bg-stone-900 text-white py-4 rounded-xl font-bold hover:bg-stone-800 text-[10px] uppercase tracking-widest shadow-md transition">Accept Order</button>
                                     ) : (
                                         <button onClick={() => updateDoc(doc(db, 'orders', o.id), { status: 'completed' })} className="flex-1 bg-green-600 text-white py-4 rounded-xl font-bold hover:bg-green-700 text-[10px] uppercase tracking-widest shadow-md transition">Complete Order</button>
                                     )}
                                     {o.status === 'pending' && <button onClick={async () => { const r = prompt("Reason for decline?"); if(r) { 
                                         if (o.paymentIntentId) {
+                                            const token = await getAuthToken();
                                             const cancelRes = await fetch('/api/stripe/cancel', {
                                                 method: 'POST',
-                                                headers: { 'Content-Type': 'application/json' },
+                                                headers: {
+                                                    'Content-Type': 'application/json',
+                                                    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                                                },
                                                 body: JSON.stringify({ paymentIntentId: o.paymentIntentId })
                                             });
                                             const cancelData = await cancelRes.json();
@@ -1887,7 +2055,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                                             statusNote: `${profile?.businessName || 'Cafe'} declined this order: ${r}`,
                                             statusUpdatedAt: new Date().toISOString()
                                         }); 
-                                        if(o.mobile) sendSMS(o.mobile, `Pull Up Coffee: Sorry, ${profile?.businessName} had to decline your order (${r}).`); 
+                                        if(o.mobile) sendSMS(o.mobile, 'order-declined', { cafeName: profile?.businessName || 'Your cafe', reason: r }, o.id); 
                                     } }} className="px-5 py-4 text-red-500 bg-white border border-red-200 hover:bg-red-50 rounded-xl transition font-bold text-sm"><Icons.X /></button>}
                                 </div>
                                 {o.status === 'preparing' && <button onClick={async () => {
@@ -1896,7 +2064,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                                         statusNote: `${profile?.businessName || 'Cafe'} marked your order ready. Pull up close and tap the app button when parked.`,
                                         statusUpdatedAt: new Date().toISOString()
                                     });
-                                    if(o.mobile) sendSMS(o.mobile, `Pull Up Coffee: ${profile?.businessName || 'Your cafe'} says your order is ready. Pull up close and let us know where you are.`);
+                                    if(o.mobile) sendSMS(o.mobile, 'order-ready', { cafeName: profile?.businessName || 'Your cafe', orderId: o.id }, o.id);
                                 }} className="w-full mt-2 py-3 text-[10px] text-white font-bold uppercase tracking-widest bg-stone-900 rounded-xl hover:bg-stone-800 transition">Mark Ready in App</button>}
                                 {(o.status === 'preparing' || o.status === 'ready') && <button onClick={async () => { 
                                     await updateDoc(doc(db, 'orders', o.id), {
@@ -2277,42 +2445,18 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                             </div>
                         </div>
 
-                        {/* Security PIN (2FA) */}
+                        {/* SMS Two-Factor Authentication (2FA) */}
                         <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-stone-200 space-y-4">
                             <div className="flex items-start gap-3">
                                 <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center shrink-0">
-                                    <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                                    <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
                                 </div>
                                 <div>
-                                    <h3 className="font-bold text-xl text-stone-900 mb-1">Security PIN (2FA)</h3>
-                                    <p className="text-sm text-stone-500">Add an extra layer of security. When enabled, you&apos;ll need to enter a 4-8 digit PIN after your password on every login.</p>
+                                    <h3 className="font-bold text-xl text-stone-900 mb-1">SMS Two-Factor Authentication</h3>
+                                    <p className="text-sm text-stone-500">Add an extra layer of security. When enabled, a unique 6-digit code will be sent to your mobile on every login.</p>
                                 </div>
                             </div>
-                            {profile?.securityPinHash ? (
-                                <div className="space-y-3">
-                                    <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl p-3">
-                                        <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                        <p className="text-[10px] font-bold uppercase tracking-widest text-green-700">Security PIN is active</p>
-                                    </div>
-                                    <button 
-                                        disabled={accountBusy}
-                                        onClick={async () => {
-                                            if (!confirm('Remove your Security PIN? You can set a new one later.')) return;
-                                            setAccountBusy(true);
-                                            try {
-                                                await updateDoc(doc(db, 'cafes', user.uid), { securityPinHash: null });
-                                                alert('Security PIN removed.');
-                                            } catch { alert('Failed to remove PIN.'); }
-                                            finally { setAccountBusy(false); }
-                                        }}
-                                        className="w-full bg-red-50 text-red-600 border border-red-200 p-3 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-red-100 transition disabled:opacity-50"
-                                    >
-                                        Remove Security PIN
-                                    </button>
-                                </div>
-                            ) : (
-                                <SecurityPinSetup userId={user?.uid} db={db} />
-                            )}
+                            <Sms2faToggle userId={user?.uid} db={db} profile={profile} />
                         </div>
 
                         <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-stone-200 space-y-4">

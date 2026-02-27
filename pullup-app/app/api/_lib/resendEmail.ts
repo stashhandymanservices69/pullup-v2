@@ -443,6 +443,59 @@ Founder, Pull Up Coffee`;
 
 // ── Send helper ───────────────────────────────────────────────
 
+/* ─── 8. PASSWORD RESET (branded) ──────────────────────────── */
+
+export function buildPasswordResetEmail(email: string, resetLink: string) {
+  const subject = 'Reset Your Pull Up Coffee Password 🔐';
+
+  const html = emailWrapper(`
+    <div style="text-align:center; margin-bottom:20px;">
+      <div style="display:inline-block; background:#fef3c7; border-radius:50%; width:64px; height:64px; line-height:64px; font-size:32px;">🔐</div>
+    </div>
+
+    <h2 style="color:${BRAND_DARK}; margin-top:0; text-align:center;">Password Reset Request</h2>
+
+    <p>Hi there,</p>
+
+    <p>We received a request to reset the password for the account associated with <strong>${escapeHtml(email)}</strong>.</p>
+
+    <p style="text-align:center; margin:28px 0;">
+      ${btn('RESET MY PASSWORD', resetLink)}
+    </p>
+
+    <div style="background:#fafaf9; border-radius:12px; padding:16px; margin:16px 0;">
+      <p style="margin:0; font-size:13px; color:#78716c;">
+        ⏰ This link expires in <strong>1 hour</strong>.<br/>
+        🔒 If you didn't request this, you can safely ignore this email — your password won't change.
+      </p>
+    </div>
+
+    <p style="font-size:13px; color:#78716c;">For security, this link can only be used once. If you need another reset, visit the login page and request a new link.</p>
+
+    ${signoff}
+  `);
+
+  const text = `Password Reset Request
+
+Hi there,
+
+We received a request to reset the password for ${email}.
+
+Reset your password: ${resetLink}
+
+This link expires in 1 hour. If you didn't request this, you can safely ignore this email.
+
+For security, this link can only be used once.
+
+Cheers,
+Steven
+Founder, Pull Up Coffee`;
+
+  return { subject, html, text };
+}
+
+
+
 interface SendResult {
   success: boolean;
   id?: string;

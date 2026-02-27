@@ -31,11 +31,12 @@ const AU_MOBILE_RE = /^\+614\d{8}$/;
 
 // Server-side SMS templates — only these messages can be sent
 const SMS_TEMPLATES: Record<string, (ctx: Record<string, string>) => string> = {
-  'order-ready':     (ctx) => `Pull Up Coffee: Your order ${ctx.orderId || ''} is ready for pickup! The cafe is waiting for you.`.trim(),
-  'order-accepted':  (ctx) => `Pull Up Coffee: Great news! ${ctx.cafeName || 'Your cafe'} accepted your order. Heading your way.`.trim(),
-  'order-declined':  (ctx) => `Pull Up Coffee: Sorry, ${ctx.cafeName || 'the cafe'} couldn't fulfill your order. Your hold has been released.`.trim(),
+  'order-ready':     (ctx) => `Pull Up Coffee: Your order is ready for pickup at ${ctx.cafeName || 'the cafe'}! Pull up close — we'll bring it out. ☕🚗`.trim(),
+  'order-accepted':  (ctx) => `Pull Up Coffee: Great news! ${ctx.cafeName || 'Your cafe'} has accepted your order and started preparing it now.`.trim(),
+  'order-declined':  (ctx) => `Pull Up Coffee: Sorry, ${ctx.cafeName || 'the cafe'} couldn't fulfill your order${ctx.reason ? ' (' + ctx.reason + ')' : ''}. Your payment hold has been released — you were not charged.`.trim(),
   'cafe-open':       (ctx) => `Pull Up Coffee: ${ctx.cafeName || 'A favourite cafe'} just opened! Order now for curbside pickup.`.trim(),
   'cafe-approved':   (ctx) => `Pull Up Coffee: Great news! ${ctx.businessName || 'Your business'} has been approved! Log in at pullupcoffee.com.au to set up your menu and go live. Welcome aboard! ☕🚗`.trim(),
+  'login-code':      (ctx) => `Pull Up Coffee: Your login code is ${ctx.code || '------'}. Valid for 5 minutes. Do not share this code.`.trim(),
 };
 
 // Export SMS templates & helpers for server-side use (e.g. admin approve route)
