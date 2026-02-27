@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { checkRateLimit, parseJson, requireAllowedOrigin, requireJsonContentType, serverError } from '@/app/api/_lib/requestSecurity';
+import { checkRateLimit, isValidCafeId, parseJson, requireAllowedOrigin, requireJsonContentType, serverError } from '@/app/api/_lib/requestSecurity';
 import { getStripeClient, stripeConfigErrorResponse } from '@/app/api/_lib/stripeServer';
 
 type PayItem = {
@@ -36,7 +36,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid cafeStripeId' }, { status: 400 });
     }
 
-    // 1. Calculate totals
+    // Validate cafeId format
+    if (cafeId !== undefined && !isValidCafeId(cafeId)) {
+      return NextResponse.json({ error: 'Invalid cafeId' }, { status: 400 });
+    }
+
+    // Validate each item
+    for (const item of items) {
+      if (typeof item.name !== 'string' || item.name.length < 1 || item.name.length > 200) {
+        return NextResponse.json({ error: 'Invalid item name' }, { status: 400 });
+      }
+      if (typeof item.price !== 'number' || Number.isNaN(item.price) || item.price < 0.5 || item.price > 100) {
+        return NextResponse.json({ error: 'Invalid item price' }, { status: 400 });
+      }
+    }
+
     const typedItems = items as PayItem[];
     const serviceFee = 2.00; // Your standard fee
     const platformCut = 0.40; // 20% of the $2.00 fee

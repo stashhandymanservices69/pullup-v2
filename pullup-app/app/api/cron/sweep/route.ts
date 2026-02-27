@@ -81,7 +81,7 @@ export async function GET(req: Request) {
   } catch (error) {
     console.error('Ghost-hold sweep error:', error);
     return NextResponse.json(
-      { error: 'Sweep failed', details: String(error) },
+      { error: 'Sweep failed' },
       { status: 500 }
     );
   }

@@ -101,7 +101,6 @@ export async function POST(req: Request) {
         return NextResponse.json({
           received: true,
           printful: result.success ? 'order_created' : 'order_failed',
-          printfulOrderId: result.orderId,
         });
       } catch (err) {
         console.error(`Webhook: Error processing hat order for session ${session.id}:`, err);

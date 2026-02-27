@@ -54,7 +54,11 @@ const signValue = async (value: string) => {
 
 const getNowEpochSeconds = () => Math.floor(Date.now() / 1000);
 
-export const isAccessCodeValid = (submittedCode: string) => submittedCode.trim() === getAccessCode();
+export const isAccessCodeValid = (submittedCode: string) => {
+    const expected = getAccessCode();
+    // Use constant-time comparison to prevent timing attacks
+    return timingSafeEqual(submittedCode.trim(), expected);
+};
 
 export const createAccessToken = async () => {
     const issuedAt = `${getNowEpochSeconds()}`;

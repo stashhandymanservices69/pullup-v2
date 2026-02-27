@@ -18,6 +18,6 @@ export const getStripeClient = () => {
 
 export const stripeConfigErrorResponse = () =>
     NextResponse.json(
-        { error: 'Stripe is not configured. Missing STRIPE_SECRET_KEY.' },
+        { error: 'Payment service temporarily unavailable' },
         { status: 503 },
     );

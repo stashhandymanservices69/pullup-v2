@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { checkRateLimit, parseJson, requireAllowedOrigin, requireJsonContentType, serverError } from '@/app/api/_lib/requestSecurity';
+import { checkRateLimit, parseJson, requireAllowedOrigin, requireJsonContentType, requireFirebaseAuth, serverError } from '@/app/api/_lib/requestSecurity';
 import { getStripeClient, stripeConfigErrorResponse } from '@/app/api/_lib/stripeServer';
+import { detectBot } from '@/app/api/_lib/botDefense';
 
 export async function POST(req: Request) {
   try {
@@ -10,10 +11,17 @@ export async function POST(req: Request) {
     const originCheck = requireAllowedOrigin(req);
     if (originCheck) return originCheck;
 
+    const botCheck = detectBot(req);
+    if (botCheck) return botCheck;
+
     const contentTypeCheck = requireJsonContentType(req);
     if (contentTypeCheck) return contentTypeCheck;
 
-    const limited = checkRateLimit(req, 'stripe-cancel', 12, 60_000);
+    // AUTHENTICATION REQUIRED — only signed-in cafe owners can cancel payments
+    const authResult = await requireFirebaseAuth(req);
+    if (authResult instanceof NextResponse) return authResult;
+
+    const limited = checkRateLimit(req, 'stripe-cancel', 10, 60_000);
     if (limited) return limited;
 
     const body = await parseJson<{ paymentIntentId: string }>(req);
