@@ -1,10 +1,19 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect, react/no-unescaped-entities */
 
-import React, { useState, useEffect, useRef, Fragment } from 'react';
+import React, { useState, useEffect, useRef, Fragment, useCallback } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, onSnapshot, query, doc, updateDoc, deleteDoc, setDoc, getDoc, getDocs, where } from 'firebase/firestore';
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, signInAnonymously, sendPasswordResetEmail } from 'firebase/auth';
+import ReCAPTCHA from 'react-google-recaptcha';
+
+const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || '';
+
+/** Hash a string with SHA-256 (browser-native). Returns hex string. */
+const sha256 = async (input: string): Promise<string> => {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+};
 
 // --- SECURE CONFIGURATION ---
 const firebaseConfig = {
@@ -756,20 +765,114 @@ const LandingPage = ({ setView, onAbout, openLegal }: any) => (
     </div>
 );
 
+/** Inline component for setting a new Security PIN in merchant dashboard */
+const SecurityPinSetup = ({ userId, db }: { userId: string; db: any }) => {
+    const [pin, setPin] = useState('');
+    const [confirmPin, setConfirmPin] = useState('');
+    const [saving, setSaving] = useState(false);
+
+    const handleSetPin = async () => {
+        if (pin.length < 4) { alert('PIN must be at least 4 digits.'); return; }
+        if (pin !== confirmPin) { alert('PINs do not match.'); return; }
+        setSaving(true);
+        try {
+            const hash = await sha256(pin);
+            await updateDoc(doc(db, 'cafes', userId), { securityPinHash: hash });
+            alert('Security PIN set! You\'ll need this PIN on every future login.');
+            setPin(''); setConfirmPin('');
+        } catch { alert('Failed to save PIN.'); }
+        finally { setSaving(false); }
+    };
+
+    return (
+        <div className="space-y-3">
+            <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-stone-500 mb-1.5">New PIN (4-8 digits)</label>
+                <input type="password" inputMode="numeric" maxLength={8} value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))} placeholder="••••" className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:border-orange-500 transition text-stone-900 font-medium text-center text-xl tracking-[0.4em]" />
+            </div>
+            <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-stone-500 mb-1.5">Confirm PIN</label>
+                <input type="password" inputMode="numeric" maxLength={8} value={confirmPin} onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))} placeholder="••••" className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:border-orange-500 transition text-stone-900 font-medium text-center text-xl tracking-[0.4em]" />
+            </div>
+            <button disabled={saving || pin.length < 4} onClick={handleSetPin} className="w-full bg-orange-600 text-white p-3 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-orange-500 transition disabled:opacity-50">
+                {saving ? 'Setting PIN...' : 'Set Security PIN'}
+            </button>
+            <p className="text-[9px] text-stone-400 italic text-center">Once set, you will be asked for this PIN every time you log in. Keep it safe — support cannot recover it.</p>
+        </div>
+    );
+};
+
 const BusinessLogin = ({ setView, auth, openLegal }: any) => {
     const [email, setEmail] = useState('');
     const [pass, setPass] = useState('');
     const [loadingAuth, setLoadingAuth] = useState(false);
+    const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+    const [pinChallenge, setPinChallenge] = useState(false);
+    const [pinInput, setPinInput] = useState('');
+    const [pinHash, setPinHash] = useState<string | null>(null);
+    const [pinAttempts, setPinAttempts] = useState(0);
+    const captchaRef = useRef<any>(null);
+    const captchaEnabled = Boolean(RECAPTCHA_SITE_KEY);
 
     const handleLogin = async (e: any) => {
         e.preventDefault();
+        if (captchaEnabled && !captchaToken) {
+            alert('Please complete the CAPTCHA verification.');
+            return;
+        }
         setLoadingAuth(true);
         try {
-            await signInWithEmailAndPassword(auth, email, pass);
+            const cred = await signInWithEmailAndPassword(auth, email, pass);
+            // Check if merchant has a Security PIN set
+            const db = getFirestore();
+            const cafeDoc = await getDoc(doc(db, 'cafes', cred.user.uid));
+            if (cafeDoc.exists() && cafeDoc.data()?.securityPinHash) {
+                // PIN is set — need 2FA challenge
+                setPinHash(cafeDoc.data().securityPinHash);
+                setPinChallenge(true);
+                setLoadingAuth(false);
+                // Sign out temporarily — only let them in after PIN
+                await signOut(auth);
+                return;
+            }
+            // No PIN, login complete
         } catch (err: any) {
             alert(err.message.replace('Firebase: ', '').replace('Error ', ''));
+            captchaRef.current?.reset();
+            setCaptchaToken(null);
         } finally {
             setLoadingAuth(false);
+        }
+    };
+
+    const verifyPin = async () => {
+        if (!pinInput.trim()) return;
+        const hash = await sha256(pinInput.trim());
+        if (hash === pinHash) {
+            // PIN correct — re-authenticate
+            setLoadingAuth(true);
+            try {
+                await signInWithEmailAndPassword(auth, email, pass);
+            } catch (err: any) {
+                alert('Session error. Please log in again.');
+                setPinChallenge(false);
+                setPinInput('');
+            } finally {
+                setLoadingAuth(false);
+            }
+        } else {
+            const next = pinAttempts + 1;
+            setPinAttempts(next);
+            setPinInput('');
+            if (next >= 3) {
+                alert('Too many incorrect PIN attempts. Please try again.');
+                setPinChallenge(false);
+                setPinAttempts(0);
+                captchaRef.current?.reset();
+                setCaptchaToken(null);
+            } else {
+                alert(`Incorrect PIN. ${3 - next} attempt(s) remaining.`);
+            }
         }
     };
 
@@ -792,6 +895,24 @@ const BusinessLogin = ({ setView, auth, openLegal }: any) => {
                     <h2 className="text-2xl font-serif italic font-bold mb-1 text-white">Business Login</h2>
                     <p className="text-stone-500 text-[10px] uppercase tracking-[0.2em] mb-8 font-bold">Partner Dashboard Access</p>
                     
+                    {pinChallenge ? (
+                        <div className="space-y-5">
+                            <div className="text-center mb-2">
+                                <div className="w-14 h-14 mx-auto mb-4 bg-orange-500/20 rounded-full flex items-center justify-center">
+                                    <svg className="w-7 h-7 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                                </div>
+                                <p className="text-white font-bold text-lg">Security PIN Required</p>
+                                <p className="text-stone-400 text-xs mt-1">Enter your 4–8 digit Security PIN to continue.</p>
+                            </div>
+                            <input type="password" inputMode="numeric" maxLength={8} value={pinInput} onChange={e => setPinInput(e.target.value.replace(/\D/g, ''))} placeholder="Enter PIN" className="w-full p-4 bg-[#0f0f0f] border border-stone-800 rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium text-center text-2xl tracking-[0.5em]" autoFocus />
+                            <button onClick={verifyPin} disabled={loadingAuth || pinInput.length < 4} className="w-full bg-orange-600 text-white py-5 rounded-2xl font-bold hover:bg-orange-500 disabled:opacity-50 transition-all active:scale-95 uppercase tracking-widest text-sm">
+                                {loadingAuth ? 'Verifying...' : 'VERIFY PIN'}
+                            </button>
+                            <button onClick={() => { setPinChallenge(false); setPinInput(''); setPinAttempts(0); }} className="w-full text-stone-500 text-[10px] uppercase tracking-widest font-bold hover:text-stone-300 transition py-2">
+                                ← Back to Login
+                            </button>
+                        </div>
+                    ) : (
                     <form onSubmit={handleLogin} className="space-y-5">
                         <div>
                             <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-2">Email Address</label>
@@ -801,10 +922,16 @@ const BusinessLogin = ({ setView, auth, openLegal }: any) => {
                             <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-2">Password</label>
                             <input type="password" value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••" minLength={6} className="w-full p-4 bg-[#0f0f0f] border border-stone-800 rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium" required />
                         </div>
-                        <button type="submit" disabled={loadingAuth} className="w-full bg-orange-600 text-white py-5 rounded-2xl font-bold mt-4 hover:bg-orange-500 disabled:opacity-50 transition-all active:scale-95 uppercase tracking-widest text-sm shadow-[0_0_12px_rgba(249,115,22,0.25)]">
+                        {captchaEnabled && (
+                            <div className="flex justify-center">
+                                <ReCAPTCHA ref={captchaRef} sitekey={RECAPTCHA_SITE_KEY} theme="dark" onChange={(token: string | null) => setCaptchaToken(token)} onExpired={() => setCaptchaToken(null)} />
+                            </div>
+                        )}
+                        <button type="submit" disabled={loadingAuth || (captchaEnabled && !captchaToken)} className="w-full bg-orange-600 text-white py-5 rounded-2xl font-bold mt-4 hover:bg-orange-500 disabled:opacity-50 transition-all active:scale-95 uppercase tracking-widest text-sm shadow-[0_0_12px_rgba(249,115,22,0.25)]">
                             {loadingAuth ? 'Signing In...' : 'SIGN IN'}
                         </button>
                     </form>
+                    )}
 
                     <div className="mt-8 pt-6 border-t border-stone-800 text-center">
                         <p className="text-stone-500 text-[10px] uppercase tracking-widest mb-4">New to Pull Up?</p>
@@ -845,6 +972,9 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
     const [loadingAuth, setLoadingAuth] = useState(false);
     const [showExploreMore, setShowExploreMore] = useState(false);
     const [earlyAdopterSpotsLeft, setEarlyAdopterSpotsLeft] = useState<number | null>(null);
+    const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+    const captchaRef = useRef<any>(null);
+    const captchaEnabled = Boolean(RECAPTCHA_SITE_KEY);
 
     useEffect(() => {
         const loadEarlyAdopterSpots = async () => {
@@ -861,6 +991,10 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
 
     const handleSignup = async (e: any) => {
         e.preventDefault();
+        if (captchaEnabled && !captchaToken) {
+            alert('Please complete the CAPTCHA verification.');
+            return;
+        }
         setLoadingAuth(true);
         try {
             if (pass !== confirmPass) {
@@ -902,6 +1036,8 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
             setView('merchant-login');
         } catch (err: any) {
             alert(err.message.replace('Firebase: ', '').replace('Error ', ''));
+            captchaRef.current?.reset();
+            setCaptchaToken(null);
         } finally {
             setLoadingAuth(false);
         }
@@ -1050,7 +1186,12 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
                                 <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">Confirm Password</label>
                                 <input type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} placeholder="••••••••" minLength={6} className="w-full p-3 sm:p-4 bg-[#0f0f0f] border border-stone-800 rounded-xl sm:rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium" required />
                             </div>
-                            <button type="submit" disabled={loadingAuth} className="w-full bg-orange-600 text-white py-4 sm:py-5 rounded-2xl font-bold mt-4 sm:mt-6 hover:bg-orange-500 disabled:opacity-50 transition-all active:scale-95 uppercase tracking-widest text-sm shadow-[0_0_12px_rgba(249,115,22,0.25)]">
+                            {captchaEnabled && (
+                                <div className="flex justify-center">
+                                    <ReCAPTCHA ref={captchaRef} sitekey={RECAPTCHA_SITE_KEY} theme="dark" onChange={(token: string | null) => setCaptchaToken(token)} onExpired={() => setCaptchaToken(null)} />
+                                </div>
+                            )}
+                            <button type="submit" disabled={loadingAuth || (captchaEnabled && !captchaToken)} className="w-full bg-orange-600 text-white py-4 sm:py-5 rounded-2xl font-bold mt-4 sm:mt-6 hover:bg-orange-500 disabled:opacity-50 transition-all active:scale-95 uppercase tracking-widest text-sm shadow-[0_0_12px_rgba(249,115,22,0.25)]">
                                 {loadingAuth ? 'Processing...' : 'Submit Application'}
                             </button>
                         </form>
@@ -2134,6 +2275,44 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                             <div className="pt-4 border-t border-stone-100">
                                 <p className="text-[9px] text-stone-500 italic text-center">Press &quot;Save Account Settings&quot; to apply changes. Login email changes require manual verification via support.</p>
                             </div>
+                        </div>
+
+                        {/* Security PIN (2FA) */}
+                        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-stone-200 space-y-4">
+                            <div className="flex items-start gap-3">
+                                <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center shrink-0">
+                                    <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-xl text-stone-900 mb-1">Security PIN (2FA)</h3>
+                                    <p className="text-sm text-stone-500">Add an extra layer of security. When enabled, you&apos;ll need to enter a 4-8 digit PIN after your password on every login.</p>
+                                </div>
+                            </div>
+                            {profile?.securityPinHash ? (
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl p-3">
+                                        <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-green-700">Security PIN is active</p>
+                                    </div>
+                                    <button 
+                                        disabled={accountBusy}
+                                        onClick={async () => {
+                                            if (!confirm('Remove your Security PIN? You can set a new one later.')) return;
+                                            setAccountBusy(true);
+                                            try {
+                                                await updateDoc(doc(db, 'cafes', user.uid), { securityPinHash: null });
+                                                alert('Security PIN removed.');
+                                            } catch { alert('Failed to remove PIN.'); }
+                                            finally { setAccountBusy(false); }
+                                        }}
+                                        className="w-full bg-red-50 text-red-600 border border-red-200 p-3 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-red-100 transition disabled:opacity-50"
+                                    >
+                                        Remove Security PIN
+                                    </button>
+                                </div>
+                            ) : (
+                                <SecurityPinSetup userId={user?.uid} db={db} />
+                            )}
                         </div>
 
                         <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-stone-200 space-y-4">
