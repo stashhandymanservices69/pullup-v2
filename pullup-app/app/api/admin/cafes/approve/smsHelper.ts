@@ -39,7 +39,7 @@ export async function sendApprovalSms(
     return { success: false, error: 'Not a valid AU mobile number, skipping SMS' };
   }
 
-  const body = `Pull Up Coffee: Great news! ${businessName} has been approved! Log in at pullupcoffee.com.au to set up your menu and go live. Welcome aboard! ☕🚗`;
+  const body = `Pull Up Coffee: Great news! ${businessName} has been approved! Log in at pullupcoffee.com to set up your menu and go live. Welcome aboard! ☕🚗`;
 
   if (!client || !from) {
     console.log(`[SMS SIMULATION] Approval SMS → ${normalizedTo}`);

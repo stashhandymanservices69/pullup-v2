@@ -1,13 +1,13 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect, react/no-unescaped-entities */
 
-import React, { useState, useEffect, useRef, Fragment, useCallback } from 'react';
+import React, { useState, useEffect, useRef, Fragment, useCallback, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, onSnapshot, query, doc, updateDoc, deleteDoc, setDoc, getDoc, getDocs, where } from 'firebase/firestore';
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import ReCAPTCHA from 'react-google-recaptcha';
-
-const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || '';
+import { SUPPORTED_COUNTRIES, detectCountry, getCountryConfig } from '@/lib/i18n';
+// Anti-bot: honeypot + timing (replaces broken reCAPTCHA)
+const ANTI_BOT_MIN_MS = 3000; // minimum time to fill form (bots are instant)
 
 // --- SECURE CONFIGURATION ---
 const firebaseConfig = {
@@ -162,10 +162,12 @@ const ONBOARDING_VIDEOS = [
     { label: 'Live Order + Curbside Flow', url: 'https://www.youtube.com/watch?v=ysz5S6PUM-U' }
 ];
 
-const MIN_CURBSIDE_FEE = 2.0;
-const MAX_CURBSIDE_FEE = 6.0;
+const MIN_CURBSIDE_FEE = 0.0;
+const MAX_CURBSIDE_FEE = 25.0;
+const PLATFORM_SERVICE_FEE = 0.99;
 const MIN_CART_TOTAL = 0;
-const EARLY_ADOPTER_CAFE_LIMIT = 33;
+const EARLY_ADOPTER_CAFE_LIMIT = 100;
+const EARLY_PARTNER_REBATE = 0.25;
 const LIVE_GPS_AUTO_SHARE_DISTANCE_METERS = 2500;
 const LIVE_GPS_AUTO_SHARE_ETA_SECONDS = 300;
 const LIVE_GPS_ARRIVED_DISTANCE_METERS = 80;
@@ -213,6 +215,8 @@ const Icons = {
     Sliders: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>,
     Clock: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
     TrendingUp: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
+    Eye: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
+    EyeOff: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>,
     Apple: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 1.64c-.33.37-.8.56-1.34.56-.47 0-.9-.16-1.28-.5-.38-.34-.6-.82-.6-1.34 0-.49.17-.92.53-1.29.35-.36.83-.56 1.34-.56.49 0 .91.17 1.28.53.37.37.56.81.56 1.3 0 .47-.16.92-.49 1.3zM21.36 17.68c-.68 2.06-1.56 3.69-2.58 4.88-1.04 1.21-2.03 1.83-3.03 1.83-.49 0-1.11-.14-1.83-.44-.73-.29-1.42-.44-2.03-.44-.61 0-1.33.15-2.08.45-.75.3-1.36.43-1.8.43-.95 0-1.92-.61-2.92-1.78-2.28-2.67-3.41-5.63-3.41-8.8 0-1.91.5-3.5 1.5-4.73 1.01-1.24 2.37-1.86 4.09-1.86.6 0 1.34.19 2.22.56.55.24.96.36 1.22.36.33 0 .86-.14 1.58-.41.72-.28 1.45-.43 2.19-.43 1.07 0 2.02.3 2.85.91.83.61 1.4 1.38 1.7 2.28-1.58.7-2.39 2.05-2.39 3.97 0 1.25.43 2.35 1.27 3.25.75.81 1.65 1.25 2.65 1.28-.15.86-.42 1.69-.81 2.52z"/></svg>,
     Smartphone: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>,
 };
@@ -236,8 +240,8 @@ const PullUpLogo = ({ className = "w-12 h-12" }: any) => (
 
 const AboutModal = ({ onClose }: any) => (
     <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[150] flex items-center justify-center p-4 animate-fade-in">
-        <div className="bg-white w-full max-w-4xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[95vh]">
-            <div className="md:w-5/12 bg-stone-900 flex flex-col items-center justify-center p-10 text-center border-r border-stone-800">
+        <div className="bg-white w-full max-w-4xl rounded-2xl sm:rounded-[3rem] shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[95vh]">
+            <div className="md:w-5/12 bg-stone-900 flex flex-col items-center justify-center p-5 sm:p-10 text-center border-r border-stone-800">
                 <div className="w-44 h-44 rounded-full border-4 border-orange-500 overflow-hidden mb-6 shadow-2xl bg-stone-800">
                     <img
                         src="https://raw.githubusercontent.com/stashhandymanservices69/pullup-coffee/main/creatorpullup.jpg"
@@ -252,7 +256,7 @@ const AboutModal = ({ onClose }: any) => (
                 <h4 className="font-bold text-white text-xl tracking-tight">Steven Weir</h4>
                 <p className="text-orange-500 text-[10px] uppercase tracking-[0.2em] font-bold mt-1">Founder & Father</p>
             </div>
-            <div className="md:w-7/12 p-10 relative overflow-y-auto">
+            <div className="md:w-7/12 p-5 sm:p-10 relative overflow-y-auto">
                 <button onClick={onClose} className="absolute top-6 right-6 text-stone-300 hover:text-stone-900 transition"><Icons.X /></button>
                 <h3 className="text-4xl font-serif font-bold text-stone-900 mb-6 italic tracking-tight leading-none">The Pull Up Story.</h3>
                 <div className="text-stone-600 text-sm leading-relaxed space-y-4 italic mb-8">
@@ -268,7 +272,7 @@ const AboutModal = ({ onClose }: any) => (
 // --- MODALS & LEGAL ---
 const TermsModal = ({ onClose }: any) => (
     <div className="fixed inset-0 bg-stone-900/80 backdrop-blur-sm z-[150] flex items-center justify-center p-4 animate-fade-in">
-        <div className="bg-white w-full max-w-lg rounded-[2rem] shadow-2xl max-h-[80vh] overflow-y-auto p-8">
+        <div className="bg-white w-full max-w-lg rounded-2xl sm:rounded-[2rem] shadow-2xl max-h-[80vh] overflow-y-auto p-4 sm:p-8">
             <div className="flex justify-between items-center mb-6">
                 <h3 className="font-serif font-bold text-2xl text-stone-900 italic">Terms & Liability</h3>
                 <button onClick={onClose} className="p-2 bg-stone-100 hover:bg-stone-200 rounded-full transition"><Icons.X /></button>
@@ -298,12 +302,12 @@ const CustomerSupportModal = ({ cafe, orderId, onClose }: any) => (
             <div className="bg-stone-50 p-5 rounded-2xl text-left border border-stone-200 mb-6">
                 <p className="font-bold text-stone-900 text-lg mb-1">{cafe?.businessName || 'Your Cafe'}</p>
                 <p className="text-xs text-stone-600 mb-3">{cafe?.address}</p>
-                <p className="text-sm font-bold text-stone-900 pt-3 border-t border-stone-200 flex items-center gap-2"><Icons.Phone /> {cafe?.phone || 'No phone provided'}</p>
+                <p className="text-sm font-bold text-stone-900 pt-3 border-t border-stone-200 flex items-center gap-2"><Icons.Phone /> {cafe?.storePhone || cafe?.phone || 'No phone provided'}</p>
                 <p className="text-[10px] text-stone-400 font-mono mt-3 uppercase tracking-widest">Order Ref: {orderId}</p>
             </div>
             
-            {cafe?.phone && <a href={`tel:${cafe?.phone}`} className="flex justify-center items-center gap-2 w-full py-4 bg-stone-900 text-white font-bold rounded-xl shadow-lg hover:bg-stone-800 transition uppercase tracking-widest text-[10px]">Call Cafe Now</a>}
-            <p className="text-[10px] text-stone-400 mt-6 leading-relaxed">If the cafe is unresponsive or you require technical platform support, email <a href="mailto:hello@pullupcoffee.com.au" className="text-orange-500 underline">hello@pullupcoffee.com.au</a></p>
+            {(cafe?.storePhone || cafe?.phone) && <a href={`tel:${cafe?.storePhone || cafe?.phone}`} className="flex justify-center items-center gap-2 w-full py-4 bg-stone-900 text-white font-bold rounded-xl shadow-lg hover:bg-stone-800 transition uppercase tracking-widest text-[10px]">Call Cafe Now</a>}
+            <p className="text-[10px] text-stone-400 mt-6 leading-relaxed">If the cafe is unresponsive or you require technical platform support, email <a href="mailto:hello@pullupcoffee.com" className="text-orange-500 underline">hello@pullupcoffee.com</a></p>
         </div>
     </div>
 );
@@ -418,10 +422,193 @@ const EditItemModal = ({ item, onSave, onClose }: any) => {
     );
 };
 
+// --- REGION-AWARE LEGAL SYSTEM ---
+type LegalRegion = 'AU' | 'US' | 'GB' | 'EU' | 'NZ' | 'CA' | 'OTHER';
+
+function detectUserRegion(): LegalRegion {
+    if (typeof navigator === 'undefined') return 'AU';
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    const lang = (navigator.language || 'en-AU').toLowerCase();
+    // Timezone-based detection (most reliable, used by Airbnb/Uber)
+    if (/australia|sydney|melbourne|brisbane|perth|adelaide|hobart|darwin/i.test(tz)) return 'AU';
+    if (/auckland|wellington|chatham/i.test(tz)) return 'NZ';
+    if (/america\/(?!argentina|bogota|lima|santiago|sao_paulo|mexico)/i.test(tz) && /us|new_york|chicago|denver|los_angeles|phoenix|anchorage|honolulu/i.test(tz)) return 'US';
+    if (/america\/toronto|america\/vancouver|america\/winnipeg|america\/halifax|america\/st_johns|america\/edmonton/i.test(tz)) return 'CA';
+    if (/europe\/london|europe\/belfast/i.test(tz)) return 'GB';
+    if (/europe\//i.test(tz)) return 'EU';
+    // Fallback to language tag
+    if (lang.includes('en-au')) return 'AU';
+    if (lang.includes('en-nz')) return 'NZ';
+    if (lang.includes('en-us')) return 'US';
+    if (lang.includes('en-ca') || lang.includes('fr-ca')) return 'CA';
+    if (lang.includes('en-gb')) return 'GB';
+    if (/^(de|fr|es|it|nl|pt|pl|sv|da|fi|el|cs|hu|ro|bg|sk|sl|hr|lt|lv|et)/.test(lang)) return 'EU';
+    return 'AU'; // Default to AU (home jurisdiction)
+}
+
+const REGION_CONFIG: Record<LegalRegion, {
+    name: string; entitySuffix: string; currency: string; currencySymbol: string;
+    consumerLaw: string; consumerLawFull: string; privacyLaw: string; privacyBody: string; privacyBodyFull: string;
+    cookieLaw: string; cookieConsent: string; disputeJurisdiction: string; disputeMechanism: string;
+    taxName: string; taxNote: string; antiSpamLaw: string; disclosureLaw: string;
+    insuranceMinimum: string; dataBreachLaw: string; arbitrationNote: string;
+    affiliateTaxNote: string; affiliateDisclosure: string;
+}> = {
+    AU: {
+        name: 'Australia', entitySuffix: 'Pty Ltd', currency: 'AUD', currencySymbol: '$',
+        consumerLaw: 'Australian Consumer Law', consumerLawFull: 'Schedule 2, Competition and Consumer Act 2010 (Cth)',
+        privacyLaw: 'Privacy Act 1988 (Cth), Australian Privacy Principles (APPs)', privacyBody: 'OAIC', privacyBodyFull: 'Office of the Australian Information Commissioner',
+        cookieLaw: 'Privacy Act 1988 (Cth) — no dedicated cookie law; cookies identifying individuals are personal information',
+        cookieConsent: 'Non-essential cookies require transparency and opt-out capability under Privacy Act.',
+        disputeJurisdiction: 'New South Wales, Australia', disputeMechanism: 'Australian Disputes Centre (ADC) mediation, then NSW courts',
+        taxName: 'GST', taxNote: 'Goods and Services Tax at 10% may apply. Pull Up Coffee is registered for GST.',
+        antiSpamLaw: 'Spam Act 2003 (Cth)', disclosureLaw: 'ACCC disclosure requirements under Australian Consumer Law',
+        insuranceMinimum: 'AUD $10,000,000', dataBreachLaw: 'Notifiable Data Breaches (NDB) scheme under Privacy Act 1988',
+        arbitrationNote: 'Mediation via Australian Disputes Centre; if unresolved within 30 days, NSW courts.',
+        affiliateTaxNote: 'You are an independent contractor. Pull Up Coffee does not withhold tax. You are solely responsible for declaring and paying all tax obligations including GST (if registered) and income tax (as assessed by the ATO). Consult a registered tax agent or visit ato.gov.au.',
+        affiliateDisclosure: '"I earn a commission if you sign up via my link." (ACCC requirement — must be prominent, proximate, and in plain English.)',
+    },
+    US: {
+        name: 'United States', entitySuffix: 'LLC', currency: 'USD', currencySymbol: '$',
+        consumerLaw: 'FTC Act & State Consumer Protection', consumerLawFull: 'Federal Trade Commission Act, 15 U.S.C. §§ 41–58, and applicable state UDAP statutes',
+        privacyLaw: 'CCPA/CPRA (California), applicable state privacy laws', privacyBody: 'FTC / State AG', privacyBodyFull: 'Federal Trade Commission & State Attorneys General',
+        cookieLaw: 'No federal cookie law; CCPA/CPRA opt-out requirements apply in California; several states have similar laws',
+        cookieConsent: 'California residents: "Do Not Sell or Share My Personal Information" link provided. Other states: opt-out mechanisms available where required.',
+        disputeJurisdiction: 'State of Delaware, United States', disputeMechanism: 'Binding arbitration under AAA Commercial Arbitration Rules, then Delaware courts',
+        taxName: 'Sales Tax', taxNote: 'State and local sales tax may apply at the rates in effect at the point of sale.',
+        antiSpamLaw: 'CAN-SPAM Act (15 U.S.C. § 7701 et seq.)', disclosureLaw: 'FTC Endorsement Guides (16 CFR Part 255) — clear and conspicuous disclosure',
+        insuranceMinimum: 'USD $2,000,000', dataBreachLaw: 'State data breach notification laws (all 50 states)',
+        arbitrationNote: 'Binding individual arbitration under AAA rules. You waive the right to participate in class actions.',
+        affiliateTaxNote: 'You are an independent contractor, not an employee. Pull Up Coffee does not withhold federal, state, or local taxes. You are solely responsible for all tax obligations. If you earn $600+ in a calendar year, you will receive a 1099-NEC. Consult a licensed CPA or visit irs.gov.',
+        affiliateDisclosure: '"Ad" or "Sponsored" or "#ad" — FTC requires clear, conspicuous, and unambiguous disclosure.',
+    },
+    GB: {
+        name: 'United Kingdom', entitySuffix: 'Ltd', currency: 'GBP', currencySymbol: '£',
+        consumerLaw: 'Consumer Rights Act 2015', consumerLawFull: 'Consumer Rights Act 2015 (c. 15), Consumer Contracts Regulations 2013',
+        privacyLaw: 'UK GDPR & Data Protection Act 2018', privacyBody: 'ICO', privacyBodyFull: 'Information Commissioner\'s Office',
+        cookieLaw: 'Privacy and Electronic Communications Regulations 2003 (PECR) — prior consent required for non-essential cookies',
+        cookieConsent: 'Explicit opt-in consent required before any non-essential cookies are placed (PECR + UK GDPR).',
+        disputeJurisdiction: 'England and Wales', disputeMechanism: 'ODR platform or ADR entity, then courts of England and Wales',
+        taxName: 'VAT', taxNote: 'Value Added Tax at 20% applies where applicable. Pull Up Coffee is VAT-registered.',
+        antiSpamLaw: 'Privacy and Electronic Communications Regulations 2003 (PECR)', disclosureLaw: 'ASA CAP Code — clear identification of advertising content',
+        insuranceMinimum: 'GBP £5,000,000', dataBreachLaw: 'UK GDPR Article 33 — 72-hour breach notification to ICO',
+        arbitrationNote: 'Alternative Dispute Resolution (ADR) or the EU/UK Online Dispute Resolution platform.',
+        affiliateTaxNote: 'You are self-employed / an independent contractor. Pull Up Coffee does not deduct tax at source. You are responsible for registering with HMRC, submitting a Self Assessment tax return, and paying Income Tax and National Insurance. If turnover exceeds the VAT threshold (currently £85,000), you must register for VAT. Visit gov.uk/self-assessment-tax-returns.',
+        affiliateDisclosure: '"Ad" or "Paid partnership" — ASA/CAP Code requires obvious, upfront identification of commercial relationships.',
+    },
+    EU: {
+        name: 'European Union', entitySuffix: 'GmbH / BV / SAS', currency: 'EUR', currencySymbol: '€',
+        consumerLaw: 'EU Consumer Rights Directive (2011/83/EU)', consumerLawFull: 'EU Consumer Rights Directive 2011/83/EU, Unfair Commercial Practices Directive 2005/29/EC',
+        privacyLaw: 'General Data Protection Regulation (EU) 2016/679 (GDPR)', privacyBody: 'National DPA', privacyBodyFull: 'Your national Data Protection Authority (e.g., CNIL, BfDI, Garante)',
+        cookieLaw: 'ePrivacy Directive 2002/58/EC — explicit opt-in consent required for all non-essential cookies',
+        cookieConsent: 'Explicit prior consent (opt-in) required for all non-essential cookies. No pre-ticked boxes. Granular choices must be offered.',
+        disputeJurisdiction: 'Member state of consumer\'s habitual residence', disputeMechanism: 'EU Online Dispute Resolution platform (ec.europa.eu/odr), then local courts',
+        taxName: 'VAT', taxNote: 'Value Added Tax applies at the rate of your member state. Reverse charge may apply for B2B.',
+        antiSpamLaw: 'ePrivacy Directive 2002/58/EC & national implementations', disclosureLaw: 'Unfair Commercial Practices Directive — transparency obligation for commercial communications',
+        insuranceMinimum: '€5,000,000', dataBreachLaw: 'GDPR Article 33 — 72-hour breach notification to supervisory authority',
+        arbitrationNote: 'EU Online Dispute Resolution platform (https://ec.europa.eu/odr); courts of consumer\'s habitual residence.',
+        affiliateTaxNote: 'You operate as an independent contractor / freelancer. Pull Up Coffee does not withhold tax. You are responsible for all tax obligations in your member state, including VAT registration if applicable (thresholds vary by country), and income tax. Consult your local tax authority or accountant.',
+        affiliateDisclosure: 'Clearly identify commercial communications per the Unfair Commercial Practices Directive and national advertising standards.',
+    },
+    NZ: {
+        name: 'New Zealand', entitySuffix: 'Ltd', currency: 'NZD', currencySymbol: '$',
+        consumerLaw: 'Consumer Guarantees Act 1993', consumerLawFull: 'Consumer Guarantees Act 1993 (NZ), Fair Trading Act 1986 (NZ)',
+        privacyLaw: 'Privacy Act 2020 (NZ)', privacyBody: 'OPC', privacyBodyFull: 'Office of the Privacy Commissioner',
+        cookieLaw: 'Privacy Act 2020 — no specific cookie law; general privacy principles apply',
+        cookieConsent: 'Transparency and fairness principles under Privacy Act 2020 apply to cookie use.',
+        disputeJurisdiction: 'Wellington, New Zealand', disputeMechanism: 'Disputes Tribunal (for claims under $30,000), then District Court of NZ',
+        taxName: 'GST', taxNote: 'Goods and Services Tax at 15% applies. Pull Up Coffee is GST-registered.',
+        antiSpamLaw: 'Unsolicited Electronic Messages Act 2007', disclosureLaw: 'Fair Trading Act 1986 — misleading conduct prohibition applies to endorsements',
+        insuranceMinimum: 'NZD $5,000,000', dataBreachLaw: 'Privacy Act 2020 — mandatory breach notification to OPC',
+        arbitrationNote: 'NZ Disputes Tribunal for claims under $30,000; District Court of NZ beyond that.',
+        affiliateTaxNote: 'You are an independent contractor. Pull Up Coffee does not withhold tax. You are responsible for declaring income and paying tax to Inland Revenue (IRD). If turnover exceeds $60,000 p.a., you must register for GST. Visit ird.govt.nz.',
+        affiliateDisclosure: '"This is an affiliate link — I earn a commission if you sign up." Fair Trading Act requires no misleading conduct.',
+    },
+    CA: {
+        name: 'Canada', entitySuffix: 'Inc.', currency: 'CAD', currencySymbol: '$',
+        consumerLaw: 'Competition Act & Provincial Consumer Protection', consumerLawFull: 'Competition Act (R.S.C., 1985, c. C-34) and provincial consumer protection statutes',
+        privacyLaw: 'PIPEDA (federal) & provincial privacy laws (PIPA AB/BC, Loi 25 QC)', privacyBody: 'OPC', privacyBodyFull: 'Office of the Privacy Commissioner of Canada',
+        cookieLaw: 'PIPEDA — implied consent for essential cookies; express consent for tracking/marketing cookies',
+        cookieConsent: 'Express consent for non-essential cookies under PIPEDA. Quebec\'s Law 25 requires explicit consent.',
+        disputeJurisdiction: 'Province of Ontario, Canada', disputeMechanism: 'ADR Institute of Canada mediation, then Ontario Superior Court',
+        taxName: 'GST/HST', taxNote: 'Goods and Services Tax / Harmonized Sales Tax applies at federal/provincial rates.',
+        antiSpamLaw: 'Canada\'s Anti-Spam Legislation (CASL, S.C. 2010, c. 23)', disclosureLaw: 'Competition Act — representations must not be false or misleading',
+        insuranceMinimum: 'CAD $5,000,000', dataBreachLaw: 'PIPEDA breach notification — report to OPC and affected individuals',
+        arbitrationNote: 'ADR Institute of Canada mediation; if unresolved, Ontario Superior Court of Justice.',
+        affiliateTaxNote: 'You are an independent contractor. Pull Up Coffee does not withhold tax. You are responsible for reporting self-employment income to the CRA (Canada Revenue Agency) and remitting CPP/EI where required. GST/HST registration required if revenue exceeds $30,000 in four consecutive quarters. Visit canada.ca/taxes.',
+        affiliateDisclosure: '"Affiliate link — I receive compensation for referrals." Competition Act requires truthful, non-misleading representations.',
+    },
+    OTHER: {
+        name: 'International', entitySuffix: 'Pty Ltd', currency: 'AUD', currencySymbol: '$',
+        consumerLaw: 'Applicable local consumer protection law', consumerLawFull: 'Your local consumer protection legislation applies to your use of this platform',
+        privacyLaw: 'Applicable local privacy/data protection law', privacyBody: 'Local DPA', privacyBodyFull: 'Your local Data Protection Authority',
+        cookieLaw: 'Local privacy and electronic communications regulations', cookieConsent: 'Review your local data protection law for cookie consent requirements.',
+        disputeJurisdiction: 'New South Wales, Australia (governing law)', disputeMechanism: 'Pull Up Coffee\'s home jurisdiction courts (NSW, Australia)',
+        taxName: 'Tax', taxNote: 'Local taxes may apply based on your jurisdiction.',
+        antiSpamLaw: 'Local anti-spam and electronic communications law', disclosureLaw: 'Local advertising standards and disclosure laws',
+        insuranceMinimum: 'AUD $10,000,000', dataBreachLaw: 'Local data breach notification law',
+        arbitrationNote: 'Disputes governed by NSW law; mediation via Australian Disputes Centre, then NSW courts.',
+        affiliateTaxNote: 'You are an independent contractor. Pull Up Coffee does not withhold tax in any jurisdiction. You are solely responsible for understanding and meeting all tax obligations in your country/state/province of residence. Consult a local tax professional.',
+        affiliateDisclosure: 'Clearly disclose your commercial relationship when promoting Pull Up Coffee, in compliance with your local advertising and consumer protection laws.',
+    },
+};
+
 // --- COMPREHENSIVE LEGAL MODAL ---
 const LegalDocumentModal = ({ type, onClose }: any) => {
     const [activeTab, setActiveTab] = useState('terms');
+    const [region, setRegion] = useState<LegalRegion>(() => detectUserRegion());
+    const rc = REGION_CONFIG[region];
     const hasSignedInBusinessAccount = Boolean(auth.currentUser && !auth.currentUser.isAnonymous);
+
+    // Affiliate signup form state
+    const [affName, setAffName] = useState('');
+    const [affEmail, setAffEmail] = useState('');
+    const [affPhone, setAffPhone] = useState('');
+    const [affCountry, setAffCountry] = useState('AU');
+    const [affChannels, setAffChannels] = useState('');
+    const [affPreferredCode, setAffPreferredCode] = useState('');
+    const [affSubmitting, setAffSubmitting] = useState(false);
+    const [affResult, setAffResult] = useState<{ ok: boolean; code?: string; message?: string } | null>(null);
+    // Affiliate dashboard state
+    const [affDashEmail, setAffDashEmail] = useState('');
+    const [affDashCode, setAffDashCode] = useState('');
+    const [affDashLoading, setAffDashLoading] = useState(false);
+    const [affDashData, setAffDashData] = useState<any>(null);
+    const [affDashError, setAffDashError] = useState('');
+    const [affShowDashboard, setAffShowDashboard] = useState(false);
+
+    const submitAffiliateSignup = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setAffSubmitting(true);
+        setAffResult(null);
+        try {
+            const res = await fetch('/api/affiliate/signup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: affName, email: affEmail, phone: affPhone, country: affCountry, channels: affChannels, preferredCode: affPreferredCode }),
+            });
+            const data = await res.json();
+            setAffResult(res.ok ? { ok: true, code: data.referralCode, message: data.message } : { ok: false, message: data.error || 'Something went wrong' });
+        } catch { setAffResult({ ok: false, message: 'Network error — please try again' }); }
+        setAffSubmitting(false);
+    };
+
+    const loadAffiliateDashboard = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setAffDashLoading(true);
+        setAffDashError('');
+        setAffDashData(null);
+        try {
+            const res = await fetch('/api/affiliate/dashboard', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: affDashEmail, referralCode: affDashCode.toUpperCase() }),
+            });
+            const data = await res.json();
+            if (res.ok) { setAffDashData(data); } else { setAffDashError(data.error || 'Could not load dashboard'); }
+        } catch { setAffDashError('Network error — please try again'); }
+        setAffDashLoading(false);
+    };
 
     const openBusinessSupport = () => {
         if (!hasSignedInBusinessAccount) return;
@@ -436,36 +623,44 @@ const LegalDocumentModal = ({ type, onClose }: any) => {
             case 'terms':
                 return (
                     <div className="space-y-4 text-sm text-stone-600 leading-relaxed">
+                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-2">
+                            <span className="text-lg">{region === 'AU' ? '🇦🇺' : region === 'US' ? '🇺🇸' : region === 'GB' ? '🇬🇧' : region === 'EU' ? '🇪🇺' : region === 'NZ' ? '🇳🇿' : region === 'CA' ? '🇨🇦' : '🌍'}</span>
+                            <p className="text-[10px] text-blue-700 font-medium">These terms are displayed for <strong>{rc.name}</strong>. Change your region above if needed.</p>
+                        </div>
                         <div>
                             <h4 className="font-bold text-stone-900 mb-2">Consumer Terms of Service</h4>
-                            <p className="text-xs text-stone-400 mb-3">Last updated: 27 February 2026 | Effective immediately upon use</p>
-                            <p className="text-xs mb-3"><strong>1. Platform Bridge Role:</strong> Pull Up Coffee Pty Ltd (ABN 17 587 686 972) operates exclusively as a technology and payment bridge connecting consumers with independent café partners. We do not prepare, store, handle, transport, or deliver food or beverages. The cafe merchant is the sole supplier of all goods. Pull Up facilitates discovery, ordering, payment processing, and curbside coordination only. No agency, partnership, joint venture, or employment relationship exists between Pull Up Coffee and any merchant, customer, or affiliate.</p>
-                            <p className="text-xs mb-3"><strong>2. Dynamic Pass-Through Pricing:</strong> All payment processing fees (Stripe 1.75% + 30¢ per transaction) are transparently passed through to the consumer. Your cafe receives 100% of menu prices and 80% of the curbside fee. The total shown at checkout includes the exact processing cost — no hidden markups.</p>
-                            <p className="text-xs mb-3"><strong>3. Merchant Responsibility:</strong> All food and beverage quality, safety, allergen management, and compliance with food handling standards (including Food Standards Australia New Zealand requirements) remains the sole responsibility of the café partner. Pull Up Coffee has no oversight, control, or supervisory role over food preparation.</p>
-                            <p className="text-xs mb-3"><strong>4. Consumer Guarantees:</strong> Goods supplied by cafe partners must be of acceptable quality and match their description under Australian Consumer Law (Schedule 2, Competition and Consumer Act 2010). Pull Up Coffee accepts no liability for food-borne illness, allergen reactions, temperature non-compliance, or product defects — these fall entirely under the café&apos;s liability and insurance coverage. Nothing in these terms purports to exclude, restrict, or modify consumer guarantees that cannot be excluded under Australian Consumer Law.</p>
+                            <p className="text-xs text-stone-400 mb-3">Last updated: 27 February 2026 | Effective immediately upon use | Jurisdiction: {rc.name}</p>
+                            <p className="text-xs mb-3"><strong>1. Platform Bridge Role:</strong> Pull Up Coffee {rc.entitySuffix} (ABN 17 587 686 972) operates exclusively as a technology and payment bridge connecting consumers with independent café partners. We do not prepare, store, handle, transport, or deliver food or beverages. The cafe merchant is the sole supplier of all goods. Pull Up facilitates discovery, ordering, payment processing, and curbside coordination only. No agency, partnership, joint venture, or employment relationship exists between Pull Up Coffee and any merchant, customer, or affiliate.</p>
+                            <p className="text-xs mb-3"><strong>2. Pricing Model:</strong> A flat $0.99 Pull Up Service Fee is added to every order. The curbside fee (if any) is set by the cafe and paid entirely to the cafe. Stripe payment processing fees are absorbed by the cafe as a standard business cost. All prices are displayed in {rc.currency} ({rc.currencySymbol}).</p>
+                            <p className="text-xs mb-3"><strong>3. Merchant Responsibility:</strong> All food and beverage quality, safety, allergen management, and compliance with food handling standards remains the sole responsibility of the café partner. Pull Up Coffee has no oversight, control, or supervisory role over food preparation.</p>
+                            <p className="text-xs mb-3"><strong>4. Consumer Guarantees:</strong> Goods supplied by cafe partners must be of acceptable quality and match their description under {rc.consumerLawFull}. Pull Up Coffee accepts no liability for food-borne illness, allergen reactions, temperature non-compliance, or product defects — these fall entirely under the café&apos;s liability and insurance coverage. Nothing in these terms purports to exclude, restrict, or modify consumer guarantees that cannot be excluded under {rc.consumerLaw}.</p>
                             <p className="text-xs mb-3"><strong>5. Authorisation Hold & Capture:</strong> Upon checkout, Pull Up places a temporary authorisation hold on your card (not a charge). The cafe reviews your order and either accepts (capturing payment) or declines (releasing the hold). Ghost holds that remain unactioned are automatically swept and released within 72 hours.</p>
-                            <p className="text-xs mb-3"><strong>6. Refunds & Chargebacks:</strong> Refund eligibility is determined by the individual café partner, who is the supplier of goods under Australian Consumer Law. Customers must arrive within the agreed grace period or risk order forfeiture. The platform reserves the right to process payment reversals and chargebacks as permitted by law.</p>
-                            <p className="text-xs mb-3"><strong>7. Traffic Compliance:</strong> All orders must be picked up from a legally parked vehicle in compliance with applicable road rules and local council regulations. Do not interact with this app while driving. Pull Up Coffee accepts zero liability for traffic infringements, accidents, parking violations, or injury arising from vehicle operation.</p>
-                            <p className="text-xs mb-3"><strong>8. Limitation of Liability:</strong> To the maximum extent permitted by law, Pull Up Coffee&apos;s total aggregate liability for any claim arising from or in connection with this platform shall not exceed the total fees paid by you in the 12 months preceding the claim, or AUD $50, whichever is less. Pull Up Coffee is not liable for any indirect, incidental, special, consequential, or punitive damages, including but not limited to loss of profits, data, business opportunity, or goodwill. Pull Up Coffee is a software platform bridge only. The cafe is responsible for safe preparation, temperature control, and secure lids. Customers are responsible for safe handling and placement in a stationary vehicle.</p>
-                            <p className="text-xs mb-3"><strong>9. Assumption of Risk:</strong> By using this platform, you acknowledge that curbside food and beverage pickup inherently involves risks including but not limited to: spills, burns from hot beverages, traffic and pedestrian hazards, weather conditions, and allergen exposure. You voluntarily assume all such risks and agree that Pull Up Coffee bears no liability for outcomes arising from these inherent risks.</p>
-                            <p className="text-xs mb-3"><strong>10. Data Privacy:</strong> Location data (precise GPS coordinates) is collected solely to enable curbside handoff and merchant notification. Data is encrypted and purged upon order completion, per Privacy Act 1988 (Cth) compliance. See our Privacy Policy for full details.</p>
-                            <p className="text-xs mb-3"><strong>11. Automated Systems & AI:</strong> Use of automated systems, bots, scripts, AI agents, scraping tools, or any non-human means to access, interact with, or extract data from this platform is strictly prohibited unless expressly authorised in writing by Pull Up Coffee. Violation will result in immediate account termination, IP blocking, and may be pursued as unauthorised access under the Criminal Code Act 1995 (Cth) Division 477.</p>
+                            <p className="text-xs mb-3"><strong>6. Refunds & Chargebacks:</strong> Refund eligibility is determined by the individual café partner, who is the supplier of goods under {rc.consumerLaw}. Customers must arrive within the agreed grace period or risk order forfeiture. The platform reserves the right to process payment reversals and chargebacks as permitted by law.</p>
+                            <p className="text-xs mb-3"><strong>7. Traffic Compliance:</strong> All orders must be picked up from a legally parked vehicle in compliance with applicable road rules and local regulations. Do not interact with this app while driving. Pull Up Coffee accepts zero liability for traffic infringements, accidents, parking violations, or injury arising from vehicle operation.</p>
+                            <p className="text-xs mb-3"><strong>8. Limitation of Liability:</strong> To the maximum extent permitted by law, Pull Up Coffee&apos;s total aggregate liability for any claim arising from or in connection with this platform shall not exceed the total fees paid by you in the 12 months preceding the claim, or {rc.currencySymbol}50, whichever is less. Pull Up Coffee is not liable for any indirect, incidental, special, consequential, or punitive damages.</p>
+                            <p className="text-xs mb-3"><strong>9. Assumption of Risk:</strong> By using this platform, you acknowledge that curbside food and beverage pickup inherently involves risks including but not limited to: spills, burns from hot beverages, traffic and pedestrian hazards, weather conditions, and allergen exposure. You voluntarily assume all such risks.</p>
+                            <p className="text-xs mb-3"><strong>10. Data Privacy:</strong> Location data (precise GPS coordinates) is collected solely to enable curbside handoff and merchant notification. Data is encrypted and purged upon order completion, per {rc.privacyLaw} compliance. See our Privacy Policy for full details.</p>
+                            <p className="text-xs mb-3"><strong>11. Automated Systems & AI:</strong> Use of automated systems, bots, scripts, AI agents, scraping tools, or any non-human means to access, interact with, or extract data from this platform is strictly prohibited unless expressly authorised in writing.</p>
                             <p className="text-xs mb-3"><strong>12. User Conduct:</strong> Users must not submit fraudulent orders, abuse platform infrastructure, reverse-engineer platform logic, or engage in unsafe driving. Violation results in immediate account termination without notice or refund.</p>
-                            <p className="text-xs mb-3"><strong>13. Dispute Resolution:</strong> Any dispute arising from these terms shall first be submitted to mediation administered by the Australian Disputes Centre (ADC). If mediation fails within 30 days, disputes shall be resolved by the courts of New South Wales, Australia, whose exclusive jurisdiction the parties submit to.</p>
-                            <p className="text-xs mb-3"><strong>14. Force Majeure:</strong> Pull Up Coffee shall not be liable for any failure or delay in performance due to circumstances beyond reasonable control, including natural disasters, pandemics, government actions, internet outages, third-party service failures (Stripe, Firebase, Twilio), or cyberattacks.</p>
-                            <p className="text-xs"><strong>15. Severability & Entire Agreement:</strong> If any provision is found unenforceable, remaining provisions continue in full force. These terms constitute the entire agreement between you and Pull Up Coffee, superseding all prior agreements. Pull Up Coffee reserves the right to modify these terms at any time; continued use constitutes acceptance.</p>
+                            <p className="text-xs mb-3"><strong>13. Dispute Resolution:</strong> {rc.arbitrationNote}</p>
+                            <p className="text-xs mb-3"><strong>14. Force Majeure:</strong> Pull Up Coffee shall not be liable for any failure or delay in performance due to circumstances beyond reasonable control, including natural disasters, pandemics, government actions, internet outages, third-party service failures, or cyberattacks.</p>
+                            <p className="text-xs mb-3"><strong>15. Severability & Entire Agreement:</strong> If any provision is found unenforceable, remaining provisions continue in full force. These terms constitute the entire agreement between you and Pull Up Coffee, superseding all prior agreements.</p>
+                            <p className="text-xs mb-3"><strong>16. No Association:</strong> Pull Up Coffee Pty Ltd is an independently owned and operated Australian business. We are not associated with, affiliated with, endorsed by, or connected to any other business, entity, or social media account that may use a similar or identical name.</p>
+                            <p className="text-xs mb-3"><strong>17. Affiliate Referral Codes:</strong> Affiliate referral codes must be entered at the time of cafe registration. Referral codes cannot be applied retroactively. No exceptions.</p>
+                            <p className="text-xs mb-3"><strong>18. Governing Law:</strong> These terms are governed by the laws of {rc.disputeJurisdiction}. The parties submit to the exclusive jurisdiction of the courts of {rc.disputeJurisdiction}.</p>
+                            <p className="text-xs"><strong>19. Tax:</strong> {rc.taxNote}</p>
                         </div>
                         <div className="border-t border-stone-200 pt-4">
                             <h4 className="font-bold text-stone-900 mb-2">Merchant Partner Agreement (Summary)</h4>
-                            <p className="text-xs text-stone-400 mb-3">Effective upon merchant registration</p>
-                            <p className="text-xs mb-3"><strong>1. Platform Bridge Model:</strong> Pull Up Coffee operates as a transparent payment bridge. Merchants receive 100% of their menu prices plus 80% of the curbside fee. The platform retains only the 20% curbside fee share. All Stripe processing costs are passed through to the consumer, never deducted from merchant earnings.</p>
-                            <p className="text-xs mb-3"><strong>2. Authorisation & Capture:</strong> Orders use a manual capture flow. The merchant must accept or decline within a reasonable timeframe. Unactioned authorisation holds are automatically swept and released within 72 hours by the platform&apos;s ghost-hold sweeper.</p>
-                            <p className="text-xs mb-3"><strong>3. Full Indemnification:</strong> Merchants agree to fully indemnify, defend, and hold harmless Pull Up Coffee Pty Ltd, its founders, directors, officers, employees, and agents from and against any and all claims, losses, damages, liabilities, costs, and expenses (including legal fees on a full indemnity basis) arising from or in connection with: food safety incidents, allergen reactions, food-borne illness, product defects, intellectual property infringement, parking violations, pedestrian injuries, traffic breaches, customer complaints about food quality, temperature non-compliance, or any act or omission in the preparation, handling, or delivery of goods.</p>
-                            <p className="text-xs mb-3"><strong>4. Curbside Compliance:</strong> Merchants assume sole responsibility for local council zoning laws, traffic management plans, and pedestrian safety. Pull Up Coffee assumes zero liability for illegal loading zones, traffic obstructions, or injuries occurring at or near the curbside pickup point.</p>
-                            <p className="text-xs mb-3"><strong>5. Insurance Requirement:</strong> Merchants must maintain current Public and Product Liability Insurance (minimum AUD $10,000,000 per occurrence recommended) covering curbside handoff operations. Proof of insurance may be requested at any time. Operating without adequate insurance constitutes a material breach of this agreement.</p>
-                            <p className="text-xs mb-3"><strong>6. Data Security:</strong> Merchants must handle all customer data in compliance with the Privacy Act 1988 (Cth), Australian Privacy Principles (APPs), and PCI-DSS standards. No unauthorised local storage, extraction, sale, or secondary use of personal information is permitted. Breach of data obligations constitutes grounds for immediate termination.</p>
-                            <p className="text-xs mb-3"><strong>7. Limitation of Platform Liability:</strong> To the maximum extent permitted by law, Pull Up Coffee&apos;s total liability to any merchant shall not exceed the platform fees retained in the 3 months preceding the claim. Pull Up Coffee makes no warranties regarding uptime, transaction volume, or revenue outcomes.</p>
-                            <p className="text-xs"><strong>8. Termination:</strong> Either party may terminate this agreement at any time with 7 days written notice. Pull Up Coffee may terminate immediately for breach of these terms, including but not limited to: operating without required insurance, food safety violations, data breaches, or fraudulent activity.</p>
+                            <p className="text-xs text-stone-400 mb-3">Effective upon merchant registration | {rc.name} terms</p>
+                            <p className="text-xs mb-3"><strong>1. Platform Bridge Model:</strong> Pull Up Coffee operates as a technology bridge. Merchants receive 100% of their menu prices plus 100% of the curbside fee. Customers pay a flat $0.99 Pull Up Service Fee per order. Standard Stripe processing costs (~1.75% + 30¢) are absorbed by the merchant as a normal business cost.</p>
+                            <p className="text-xs mb-3"><strong>2. Authorisation & Capture:</strong> Orders use a manual capture flow. Unactioned authorisation holds are auto-swept within 72 hours.</p>
+                            <p className="text-xs mb-3"><strong>3. Full Indemnification:</strong> Merchants agree to fully indemnify Pull Up Coffee from any claims arising from food safety, allergen reactions, product defects, IP infringement, parking violations, or pedestrian injuries.</p>
+                            <p className="text-xs mb-3"><strong>4. Curbside Compliance:</strong> Merchants assume sole responsibility for local zoning laws, traffic management, and pedestrian safety.</p>
+                            <p className="text-xs mb-3"><strong>5. Insurance Requirement:</strong> Merchants must maintain Public and Product Liability Insurance (minimum {rc.insuranceMinimum} per occurrence recommended). Operating without adequate insurance is a material breach.</p>
+                            <p className="text-xs mb-3"><strong>6. Data Security:</strong> Merchants must handle all customer data in compliance with {rc.privacyLaw} and PCI-DSS standards.</p>
+                            <p className="text-xs mb-3"><strong>7. Data Breach:</strong> {rc.dataBreachLaw}. Merchants must notify Pull Up Coffee of any data breach within 24 hours.</p>
+                            <p className="text-xs"><strong>8. Termination:</strong> Either party may terminate with 7 days written notice. Immediate termination for breach.</p>
                         </div>
                     </div>
                 );
@@ -473,13 +668,17 @@ const LegalDocumentModal = ({ type, onClose }: any) => {
                 return (
                     <div className="space-y-4 text-sm text-stone-600 leading-relaxed">
                         <div>
-                            <h4 className="font-bold text-stone-900 mb-2">Privacy Policy</h4>
+                            <h4 className="font-bold text-stone-900 mb-2">Privacy Policy — {rc.name}</h4>
+                            <p className="text-xs text-stone-400 mb-3">Governed by: {rc.privacyLaw} | Supervisory authority: {rc.privacyBodyFull} ({rc.privacyBody})</p>
                             <p className="text-xs mb-3"><strong>1. Data Collection:</strong> Pull Up Coffee collects: (a) Location data (precise GPS coordinates) solely to facilitate curbside order preparation and handoff; (b) Customer profile data (Name, Vehicle Details, Mobile Number); (c) Transaction and anonymized analytics.</p>
-                            <p className="text-xs mb-3"><strong>2. Privacy Act 1988 (Cth) Compliance:</strong> All data handling adheres strictly to the thirteen Australian Privacy Principles (APPs). Users receive clear notification (APP 5) at first download regarding the specific purposes and mechanics of location data collection.</p>
-                            <p className="text-xs mb-3"><strong>3. Data Minimization:</strong> We collect only data reasonably necessary for order fulfillment. Location data is automatically purged upon order completion. No retroactive aggregation or sale to third-party data brokers occurs without explicit, informed, secondary consent.</p>
-                            <p className="text-xs mb-3"><strong>4. International Data Transfers:</strong> Personal information may be transferred to overseas data centers operated by Amazon Web Services or Google Cloud Platform, primarily located in Australia/Singapore. This disclosure complies with APP 8 cross-border data flow requirements.</p>
-                            <p className="text-xs mb-3"><strong>5. Data Security (APP 11):</strong> Pull Up Coffee implements robust cybersecurity infrastructure to protect all personal information from misuse, unauthorized access, loss, and modification. A data breach will be reported to the Office of the Australian Information Commissioner (OAIC) as required by law.</p>
-                            <p className="text-xs"><strong>6. User Rights:</strong> You have the right to request access to, correction of, or deletion of personal information held. Submit requests to hello@pullupcoffee.com.au</p>
+                            <p className="text-xs mb-3"><strong>2. Legal Basis:</strong> Data processing is conducted under {rc.privacyLaw}. {region === 'EU' || region === 'GB' ? 'Our legal bases for processing are: (a) performance of a contract (Article 6(1)(b) GDPR), (b) legitimate interest (Article 6(1)(f) GDPR), and (c) consent where required.' : region === 'US' ? 'For California residents: you have the right to know, delete, and opt out of the sale of personal information under the CCPA/CPRA.' : 'All data handling adheres to applicable privacy principles under ' + rc.privacyLaw + '.'}</p>
+                            <p className="text-xs mb-3"><strong>3. Data Minimization:</strong> We collect only data reasonably necessary for order fulfillment. Location data is automatically purged upon order completion. No retroactive aggregation or sale to third-party data brokers occurs.</p>
+                            <p className="text-xs mb-3"><strong>4. International Data Transfers:</strong> Personal information may be transferred to overseas data centers. {region === 'EU' ? 'Transfers outside the EEA are protected by Standard Contractual Clauses (SCCs) per GDPR Article 46(2)(c).' : region === 'GB' ? 'Transfers outside the UK are protected by UK International Data Transfer Agreements or SCCs.' : 'This disclosure complies with cross-border data flow requirements under ' + rc.privacyLaw + '.'}</p>
+                            <p className="text-xs mb-3"><strong>5. Data Security:</strong> Pull Up Coffee implements robust cybersecurity infrastructure to protect all personal information. {rc.dataBreachLaw}.</p>
+                            <p className="text-xs mb-3"><strong>6. Your Rights:</strong> You have the right to request access to, correction of, or deletion of personal information held. {region === 'EU' || region === 'GB' ? 'Additional rights include: data portability (Article 20), restriction of processing (Article 18), and the right to object (Article 21). You may lodge a complaint with ' + rc.privacyBodyFull + '.' : region === 'US' ? 'California residents: you may also opt out of personal information sales and request to know categories of data collected. Submit requests to hello@pullupcoffee.com or call our privacy line.' : 'Submit requests to hello@pullupcoffee.com.'}</p>
+                            {(region === 'EU' || region === 'GB') && <p className="text-xs mb-3"><strong>7. Data Protection Officer:</strong> For GDPR-related inquiries, contact our DPO at hello@pullupcoffee.com.</p>}
+                            {region === 'US' && <p className="text-xs mb-3"><strong>7. Do Not Sell My Personal Information:</strong> Pull Up Coffee does not sell personal information. To exercise your rights under CCPA/CPRA, email hello@pullupcoffee.com.</p>}
+                            <p className="text-xs"><strong>{region === 'EU' || region === 'GB' || region === 'US' ? '8' : '7'}. Cookie & Tracking Disclosure:</strong> {rc.cookieLaw}. See our Cookie Policy for full details.</p>
                         </div>
                     </div>
                 );
@@ -487,18 +686,19 @@ const LegalDocumentModal = ({ type, onClose }: any) => {
                 return (
                     <div className="space-y-4 text-sm text-stone-600 leading-relaxed">
                         <div>
-                            <h4 className="font-bold text-stone-900 mb-2">Cookie Policy</h4>
+                            <h4 className="font-bold text-stone-900 mb-2">Cookie Policy — {rc.name}</h4>
+                            <p className="text-xs text-stone-400 mb-3">Governed by: {rc.cookieLaw}</p>
                             <p className="text-xs mb-3"><strong>1. Cookie Categories:</strong> Pull Up Coffee deploys cookies and tracking technologies segmented as follows:</p>
                             <ul className="text-xs ml-4 space-y-2 mb-3">
                                 <li><strong>Essential:</strong> Session cookies required for app functionality, payment processing, and security.</li>
-                                <li><strong>Performance:</strong> Analytics cookies (Google Analytics) to measure app usage and error tracking.</li>
+                                <li><strong>Performance:</strong> Analytics cookies to measure app usage and error tracking.</li>
                                 <li><strong>Functional:</strong> Cookies to remember user preferences and location settings.</li>
-                                <li><strong>Targeting:</strong> Advertising and retargeting cookies via Google Ads and Meta, subject to opt-in consent.</li>
+                                <li><strong>Targeting:</strong> Advertising and retargeting cookies, subject to {region === 'EU' || region === 'GB' ? 'explicit opt-in consent' : region === 'US' ? 'opt-out rights (CCPA)' : 'applicable consent requirements'}.</li>
                             </ul>
-                            <p className="text-xs mb-3"><strong>2. Privacy Act Application:</strong> While Australia lacks a dedicated "Cookie Law," cookie deployment falls under Privacy Act 1988 (Cth) oversight. Cookies that identify individuals are regulated as personal information.</p>
-                            <p className="text-xs mb-3"><strong>3. Third-Party & "Fourth-Party" Trackers:</strong> We acknowledge that approximately 72% of deployed cookies are set by non-essential third parties. Our Consent Management Platform allows explicit opt-in/opt-out for all non-essential tracking mechanisms.</p>
-                            <p className="text-xs mb-3"><strong>4. User Consent:</strong> Non-essential cookies require explicit user consent via our Consent Management Platform. Essential cookies do not require consent but are clearly disclosed.</p>
-                            <p className="text-xs"><strong>5. Transparency:</strong> Users may review, disable, or delete cookies via their device settings at any time. Full transparency with the Office of the Australian Information Commissioner (OAIC) is maintained.</p>
+                            <p className="text-xs mb-3"><strong>2. Consent Model:</strong> {rc.cookieConsent}</p>
+                            <p className="text-xs mb-3"><strong>3. Third-Party Trackers:</strong> We use services from Stripe (payments), Firebase (analytics), and may use advertising platforms. Our Consent Management Platform allows you to manage preferences for all non-essential tracking.</p>
+                            <p className="text-xs mb-3"><strong>4. User Control:</strong> You may review, disable, or delete cookies via your device settings at any time. Disabling essential cookies may affect core functionality.</p>
+                            <p className="text-xs"><strong>5. Supervisory Authority:</strong> Full transparency is maintained with {rc.privacyBodyFull} ({rc.privacyBody}). {region === 'EU' ? 'You may use the EU Online Dispute Resolution platform at ec.europa.eu/odr.' : ''}</p>
                         </div>
                     </div>
                 );
@@ -531,7 +731,7 @@ const LegalDocumentModal = ({ type, onClose }: any) => {
                                 </div>
                                 <div>
                                     <p className="font-bold text-stone-900 text-xs">How do I delete my personal data?</p>
-                                    <p className="text-xs">Email hello@pullupcoffee.com.au with your name and mobile. Data deletion requests are processed under privacy requirements.</p>
+                                    <p className="text-xs">Email hello@pullupcoffee.com with your name and mobile. Data deletion requests are processed under privacy requirements.</p>
                                 </div>
                                 <div className="bg-stone-50 border border-stone-200 rounded-xl p-3">
                                     <p className="font-bold text-stone-900 text-xs">Business question?</p>
@@ -553,18 +753,130 @@ const LegalDocumentModal = ({ type, onClose }: any) => {
                     <div className="space-y-4 text-sm text-stone-600 leading-relaxed">
                         <div>
                             <h4 className="font-bold text-stone-900 mb-2">Affiliate Program: 25% Commission on Platform Fee (First 30 Days)</h4>
-                            <p className="text-xs mb-3"><strong>Program Overview:</strong> Earn a 25% recurring commission on the platform fee for the first 30 calendar days of every cafe you refer. Commissions are paid from our platform margin — never the cafe's share.</p>
-                            <p className="text-xs mb-3"><strong>1. Commission Structure:</strong> Example using a $2 curbside fee: the cafe receives $1.60, the platform retains $0.40, and your commission is $0.10 per order (25% of the platform fee).</p>
+                            <p className="text-xs mb-3"><strong>Program Overview:</strong> Earn a 25% recurring commission on the $0.99 platform fee (≈$0.25/order) for the first 30 calendar days of every cafe you refer. Commissions are paid from our platform margin — never the cafe's share.</p>
+                            <p className="text-xs mb-3"><strong>1. Commission Structure:</strong> The customer pays a flat {rc.currencySymbol}0.99 Pull Up Service Fee. Your commission is ≈{rc.currencySymbol}0.25 per order (25% of the platform fee). The cafe keeps 100% of their menu prices and 100% of the curbside fee.</p>
                             <p className="text-xs mb-3"><strong>2. Commission Window:</strong> Your commission period starts from the cafe's first successful transaction and runs for 30 calendar days. Commissions apply only when a valid affiliate link is used during signup.</p>
-                            <p className="text-xs mb-3"><strong>3. Payouts:</strong> Commission payouts settle monthly to your connected Stripe account.</p>
+                            <p className="text-xs mb-3"><strong>3. Payouts:</strong> Commission payouts settle monthly to your connected Stripe account. All payments are made <strong>gross</strong> — Pull Up Coffee does not withhold any tax at source.</p>
                             <p className="text-xs mb-3"><strong>4. Sustainable Growth:</strong> After the commission window ends, Pull Up retains full platform margin to support infrastructure, support, and uptime.</p>
-                            <p className="text-xs mb-3"><strong>5. IP Licensing:</strong> Affiliates receive a limited, revocable license to use Pull Up Coffee logos, trademarks, and marketing assets. Unauthorized alteration or predatory Google Ads bidding on our trademarked terms is strictly prohibited.</p>
-                            <p className="text-xs mb-3"><strong>6. ACCC Disclosure Requirements:</strong> All affiliate promotions must include clear, conspicuous disclosure: "I earn a commission if you sign up via my link." Disclosure must be immediate, adjacent to the link, and written in plain English.</p>
-                            <p className="text-xs mb-3"><strong>7. Spam Act 2003 Compliance:</strong> If you use email or SMS to promote the platform, you must obtain explicit prior consent from recipients and include a functional unsubscribe mechanism in every communication.</p>
-                            <p className="text-xs mb-3"><strong>8. Full Indemnification:</strong> You agree to fully indemnify, defend, and hold harmless Pull Up Coffee Pty Ltd, its founders, directors, and agents from and against any and all claims, losses, damages, liabilities, and costs (including legal fees on a full indemnity basis) arising from your promotional activities, including making unauthorized or exaggerated claims about the app, breaching privacy laws, infringing third-party intellectual property, or any use of automated tools to generate referrals.</p>
-                            <p className="text-xs mb-3"><strong>9. Prohibited Methods:</strong> Use of bots, AI agents, automated scripts, fake accounts, or any artificial means to generate signups or inflate referral metrics is strictly prohibited and will result in immediate termination, forfeiture of commissions, and potential legal action.</p>
-                            <p className="text-xs mb-3"><strong>10. Automated Referral Codes:</strong> Each approved affiliate receives a unique referral code (e.g., PULLUP-YOURNAME). When a cafe signs up through your link or enters your code, you&apos;re automatically credited. Track your referrals and earnings through your affiliate dashboard.</p>
-                            <p className="text-xs border-t border-stone-200 pt-3"><strong>Ready to earn?</strong> Email hello@pullupcoffee.com.au with &quot;Affiliate Interest&quot; in the subject line. Include your name, preferred social channels, and audience size. You&apos;ll receive your unique code, tracking dashboard link, and marketing assets within 24 hours.</p>
+                            <p className="text-xs mb-3"><strong>5. IP Licensing:</strong> Affiliates receive a limited, revocable license to use Pull Up Coffee logos, trademarks, and marketing assets. Unauthorized alteration or predatory search ads bidding on our trademarked terms is strictly prohibited.</p>
+                            <p className="text-xs mb-3"><strong>6. Disclosure Requirements ({rc.name}):</strong> {rc.affiliateDisclosure} Compliance with {rc.disclosureLaw} is mandatory.</p>
+                            <p className="text-xs mb-3"><strong>7. Anti-Spam Compliance:</strong> If you use email or SMS to promote the platform, you must comply with {rc.antiSpamLaw}. Obtain explicit prior consent and include a functional unsubscribe mechanism.</p>
+                            <p className="text-xs mb-3"><strong>8. Full Indemnification:</strong> You agree to fully indemnify Pull Up Coffee from any claims arising from your promotional activities, including unauthorized claims about the app, privacy law breaches, IP infringement, or use of automated tools.</p>
+                            <p className="text-xs mb-3"><strong>9. Prohibited Methods:</strong> Use of bots, AI agents, automated scripts, fake accounts, or any artificial means to generate signups is strictly prohibited and will result in immediate termination and forfeiture of commissions.</p>
+                            <p className="text-xs mb-3"><strong>10. Automated Referral Codes:</strong> Each approved affiliate receives a unique referral code (e.g., PULLUP-YOURNAME). Track referrals and earnings through your affiliate dashboard.</p>
+
+                            {/* TAX & LEGAL STATUS — REGION-SPECIFIC */}
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-4">
+                                <h5 className="text-xs font-bold text-amber-900 uppercase tracking-widest mb-2">⚠️ Important: Tax & Legal Status — {rc.name}</h5>
+                                <p className="text-xs text-amber-800 mb-2"><strong>Independent Contractor Status:</strong> As a Pull Up Coffee affiliate, you are an <strong>independent contractor</strong>, not an employee. No employment, agency, or partnership relationship is created. You are not entitled to employee benefits, workers compensation, superannuation (AU), social security (US), national insurance (UK), or any equivalent.</p>
+                                <p className="text-xs text-amber-800 mb-2"><strong>Gross Payment:</strong> All affiliate commissions are paid <strong>gross</strong>. Pull Up Coffee does <strong>not</strong> withhold income tax, {rc.taxName}, or any other tax. You receive the full commission amount.</p>
+                                <p className="text-xs text-amber-800 mb-2"><strong>Your Tax Obligation:</strong> {rc.affiliateTaxNote}</p>
+                                <p className="text-xs text-amber-800"><strong>Record Keeping:</strong> You are responsible for maintaining accurate records of all commission income received from Pull Up Coffee for tax reporting purposes. Pull Up Coffee will provide transaction records upon request.</p>
+                            </div>
+
+                            <p className="text-xs border-t border-stone-200 pt-3 mt-4"><strong>Ready to earn?</strong> Apply below to receive your unique referral code instantly.</p>
+
+                            {/* Affiliate Signup Form */}
+                            {!affResult?.ok && !affShowDashboard && (
+                                <form onSubmit={submitAffiliateSignup} className="mt-4 space-y-3 bg-orange-50 rounded-xl p-4 border border-orange-200">
+                                    <h5 className="text-xs font-bold text-stone-900 uppercase tracking-widest">Apply to Become an Affiliate</h5>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <input type="text" value={affName} onChange={e => setAffName(e.target.value)} placeholder="Full Name *" className="w-full p-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 outline-none focus:border-orange-500" required />
+                                        <input type="email" value={affEmail} onChange={e => setAffEmail(e.target.value)} placeholder="Email Address *" className="w-full p-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 outline-none focus:border-orange-500" required />
+                                        <input type="tel" value={affPhone} onChange={e => setAffPhone(e.target.value)} placeholder="Phone (optional)" className="w-full p-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 outline-none focus:border-orange-500" />
+                                        <select value={affCountry} onChange={e => setAffCountry(e.target.value)} className="w-full p-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 outline-none focus:border-orange-500">
+                                            <option value="AU">Australia</option>
+                                            <option value="US">United States</option>
+                                            <option value="GB">United Kingdom</option>
+                                            <option value="NZ">New Zealand</option>
+                                            <option value="CA">Canada</option>
+                                            <option value="OTHER">Other</option>
+                                        </select>
+                                    </div>
+                                    <input type="text" value={affChannels} onChange={e => setAffChannels(e.target.value)} placeholder="Social channels / audience (Instagram, TikTok, blog, etc.)" className="w-full p-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 outline-none focus:border-orange-500" />
+                                    <input type="text" value={affPreferredCode} onChange={e => setAffPreferredCode(e.target.value.toUpperCase())} placeholder="Preferred code (optional, e.g. PULLUP-YOURNAME)" className="w-full p-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 outline-none focus:border-orange-500 uppercase" />
+                                    {affResult?.ok === false && <p className="text-xs text-red-600 font-medium">{affResult.message}</p>}
+                                    <button type="submit" disabled={affSubmitting} className="w-full py-2.5 bg-orange-600 text-white text-xs font-bold uppercase tracking-widest rounded-lg hover:bg-orange-500 disabled:opacity-50 transition">{affSubmitting ? 'Submitting...' : 'Apply Now — Get Your Code Instantly'}</button>
+                                </form>
+                            )}
+
+                            {/* Affiliate Signup Success */}
+                            {affResult?.ok && (
+                                <div className="mt-4 bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+                                    <p className="text-lg font-bold text-green-700 mb-1">🎉 Welcome to the Pull Up Affiliate Program!</p>
+                                    <p className="text-xs text-stone-600 mb-3">{affResult.message}</p>
+                                    <div className="bg-white border-2 border-dashed border-green-400 rounded-xl p-4 inline-block">
+                                        <p className="text-[9px] text-stone-500 uppercase tracking-widest mb-1">Your Referral Code</p>
+                                        <p className="text-2xl font-black text-green-700 tracking-widest">{affResult.code}</p>
+                                    </div>
+                                    <p className="text-[10px] text-stone-500 mt-3">Check your email for full details and marketing assets.</p>
+                                </div>
+                            )}
+
+                            {/* Existing Affiliate Dashboard Login */}
+                            <div className="mt-4 pt-3 border-t border-stone-200">
+                                <button onClick={() => setAffShowDashboard(!affShowDashboard)} className="text-xs text-orange-600 font-bold hover:text-orange-500 transition uppercase tracking-widest">
+                                    {affShowDashboard ? '▾ Hide Dashboard' : '▸ Already an affiliate? View Dashboard'}
+                                </button>
+                                {affShowDashboard && (
+                                    <div className="mt-3">
+                                        {!affDashData ? (
+                                            <form onSubmit={loadAffiliateDashboard} className="space-y-2">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                    <input type="email" value={affDashEmail} onChange={e => setAffDashEmail(e.target.value)} placeholder="Your affiliate email" className="w-full p-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 outline-none focus:border-orange-500" required />
+                                                    <input type="text" value={affDashCode} onChange={e => setAffDashCode(e.target.value.toUpperCase())} placeholder="Your referral code" className="w-full p-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 outline-none focus:border-orange-500 uppercase" required />
+                                                </div>
+                                                {affDashError && <p className="text-xs text-red-600">{affDashError}</p>}
+                                                <button type="submit" disabled={affDashLoading} className="w-full py-2 bg-stone-900 text-white text-xs font-bold uppercase tracking-widest rounded-lg hover:bg-stone-800 disabled:opacity-50 transition">{affDashLoading ? 'Loading...' : 'View My Dashboard'}</button>
+                                            </form>
+                                        ) : (
+                                            <div className="space-y-3 bg-stone-50 rounded-xl p-4 border border-stone-200">
+                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                                    <div className="text-center p-3 bg-white rounded-lg border border-stone-200">
+                                                        <p className="text-lg font-black text-green-600">${(affDashData.summary?.totalEarned / 100 || 0).toFixed(2)}</p>
+                                                        <p className="text-[8px] text-stone-500 uppercase tracking-widest">Total Earned</p>
+                                                    </div>
+                                                    <div className="text-center p-3 bg-white rounded-lg border border-stone-200">
+                                                        <p className="text-lg font-black text-orange-600">${(affDashData.summary?.pending / 100 || 0).toFixed(2)}</p>
+                                                        <p className="text-[8px] text-stone-500 uppercase tracking-widest">Pending</p>
+                                                    </div>
+                                                    <div className="text-center p-3 bg-white rounded-lg border border-stone-200">
+                                                        <p className="text-lg font-black text-stone-700">${(affDashData.summary?.paidOut / 100 || 0).toFixed(2)}</p>
+                                                        <p className="text-[8px] text-stone-500 uppercase tracking-widest">Paid Out</p>
+                                                    </div>
+                                                    <div className="text-center p-3 bg-white rounded-lg border border-stone-200">
+                                                        <p className="text-lg font-black text-stone-700">{affDashData.summary?.activeCafes || 0}</p>
+                                                        <p className="text-[8px] text-stone-500 uppercase tracking-widest">Active Cafes</p>
+                                                    </div>
+                                                </div>
+                                                {affDashData.referredCafes?.length > 0 && (
+                                                    <div>
+                                                        <h6 className="text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">Referred Cafes</h6>
+                                                        {affDashData.referredCafes.map((c: any, i: number) => (
+                                                            <div key={i} className="flex justify-between items-center p-2 bg-white rounded-lg border border-stone-200 mb-1 text-xs">
+                                                                <span className="font-medium text-stone-900">{c.name}</span>
+                                                                <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${c.windowActive ? 'bg-green-100 text-green-700' : 'bg-stone-100 text-stone-500'}`}>{c.windowActive ? 'Active' : 'Expired'}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {affDashData.recentCommissions?.length > 0 && (
+                                                    <div>
+                                                        <h6 className="text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">Recent Commissions</h6>
+                                                        {affDashData.recentCommissions.slice(0, 10).map((c: any, i: number) => (
+                                                            <div key={i} className="flex justify-between items-center p-2 bg-white rounded-lg border border-stone-200 mb-1 text-xs">
+                                                                <span className="text-stone-600">{c.cafeName} — ${(c.commissionCents / 100).toFixed(2)}</span>
+                                                                <span className="text-[9px] text-stone-400">{new Date(c.createdAt).toLocaleDateString()}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <button onClick={() => { setAffDashData(null); setAffShowDashboard(false); }} className="text-xs text-stone-500 hover:text-stone-700 transition">← Back</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 );
@@ -580,8 +892,8 @@ const LegalDocumentModal = ({ type, onClose }: any) => {
                             <p className="text-xs mb-3"><strong>Author & Sole Creator:</strong> Steven Weir</p>
                             <p className="text-xs mb-3"><strong>Entity:</strong> Pull Up Coffee Pty Ltd (ABN: 17 587 686 972)</p>
                             <p className="text-xs mb-3"><strong>Verification Date:</strong> 16 January 2026 (AEDT)</p>
-                            <p className="text-xs mb-3"><strong>Jurisdiction:</strong> All disputes are governed by the laws of the State of New South Wales, Australia. The parties submit to the exclusive jurisdiction of NSW courts.</p>
-                            <p className="text-xs mb-3"><strong>Copyright Assertion:</strong> Copyright © 2025–2026 Steven Weir / Pull Up Coffee Pty Ltd. This platform and all its components are protected under the Copyright Act 1968 (Cth). Copyright attaches automatically upon fixation in material form. All moral rights are asserted.</p>
+                            <p className="text-xs mb-3"><strong>Home Jurisdiction:</strong> New South Wales, Australia{region !== 'AU' ? ` | Your region: ${rc.name} — local IP laws also apply` : ''}</p>
+                            <p className="text-xs mb-3"><strong>Copyright Assertion:</strong> Copyright © 2025–2026 Steven Weir / Pull Up Coffee Pty Ltd. Protected under the Copyright Act 1968 (Cth), the Berne Convention, and {region === 'US' ? 'the U.S. Copyright Act (17 U.S.C.)' : region === 'GB' ? 'the Copyright, Designs and Patents Act 1988 (UK)' : region === 'EU' ? 'EU Copyright Directive 2019/790 and national implementations' : region === 'NZ' ? 'the Copyright Act 1994 (NZ)' : region === 'CA' ? 'the Copyright Act (R.S.C., 1985, c. C-42)' : 'applicable international IP treaties'}. All moral rights are asserted.</p>
                             <p className="text-xs mb-3"><strong>Trademark Notice:</strong> "Pull Up Coffee", the Pull Up Coffee logo, and associated trade dress are trademarks of Pull Up Coffee Pty Ltd. Use without written authorization constitutes infringement under the Trade Marks Act 1995 (Cth).</p>
                             <p className="text-xs mb-3"><strong>Novel Functionality Claimed (Prior Art):</strong> Dynamic curbside fee adjustment, authorization-hold-before-preparation payment flow, GPS-based curbside arrival notification, late arrival forfeiture logic, "I'm Outside" manual override, looping audible merchant alerts, favorites-based SMS opt-in opening notifications, and pass-through processing fee transparency.</p>
                             <p className="text-xs mb-3"><strong>Digital Signature Reference:</strong> VERIFIED USER: 4551</p>
@@ -609,7 +921,7 @@ const LegalDocumentModal = ({ type, onClose }: any) => {
                             <h4 className="font-bold text-stone-900 mb-2">Support & Contact</h4>
                             <div className="bg-stone-50 p-4 rounded-xl border border-stone-200 mb-4">
                                 <p className="text-xs font-bold text-stone-900 mb-3">Email Support (24-48hr Response)</p>
-                                <a href="mailto:hello@pullupcoffee.com.au" className="text-orange-500 underline font-bold text-xs">hello@pullupcoffee.com.au</a>
+                                <a href="mailto:hello@pullupcoffee.com" className="text-orange-500 underline font-bold text-xs">hello@pullupcoffee.com</a>
                                 <p className="text-xs text-stone-500 mt-2">Use for general inquiries, report issues, account deletion requests, or affiliate applications.</p>
                             </div>
                             <div className="bg-stone-50 p-4 rounded-xl border border-stone-200 mb-4">
@@ -644,7 +956,7 @@ const LegalDocumentModal = ({ type, onClose }: any) => {
         const modalTitle = titleMap[type] || (type.charAt(0).toUpperCase() + type.slice(1));
         return (
             <div className="fixed inset-0 bg-stone-900/80 backdrop-blur-sm z-[150] flex items-center justify-center p-4 animate-fade-in">
-                <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl max-h-[90vh] overflow-y-auto p-8">
+                <div className="bg-white w-full max-w-2xl rounded-2xl sm:rounded-[2rem] shadow-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-8">
                     <div className="flex justify-between items-start mb-6">
                         <h3 className="font-serif font-bold text-2xl text-stone-900 italic">{modalTitle}</h3>
                         <button onClick={onClose} className="p-2 bg-stone-100 hover:bg-stone-200 rounded-full transition"><Icons.X /></button>
@@ -671,6 +983,19 @@ const LegalDocumentModal = ({ type, onClose }: any) => {
                                 {t}
                             </button>
                         ))}
+                    </div>
+                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-stone-100">
+                        <span className="text-[9px] font-bold text-stone-400 uppercase tracking-widest">Region:</span>
+                        <select value={region} onChange={e => setRegion(e.target.value as LegalRegion)} className="text-xs bg-stone-50 border border-stone-200 rounded-lg px-3 py-1.5 text-stone-700 font-medium outline-none focus:border-orange-400 transition">
+                            <option value="AU">🇦🇺 Australia</option>
+                            <option value="US">🇺🇸 United States</option>
+                            <option value="GB">🇬🇧 United Kingdom</option>
+                            <option value="EU">🇪🇺 European Union</option>
+                            <option value="NZ">🇳🇿 New Zealand</option>
+                            <option value="CA">🇨🇦 Canada</option>
+                            <option value="OTHER">🌍 International</option>
+                        </select>
+                        <span className="text-[9px] text-stone-400 italic">Laws adjusted for {rc.name}</span>
                     </div>
                 </div>
                 <div className="p-8 overflow-y-auto max-h-[calc(90vh-200px)]">
@@ -713,14 +1038,14 @@ const LandingPage = ({ setView, onAbout, openLegal }: any) => (
             <button onClick={() => setView('discovery')} className="w-full max-w-xs sm:w-auto bg-white text-stone-900 py-4 sm:py-6 px-8 sm:px-16 rounded-[2rem] sm:rounded-[2.5rem] font-bold text-lg sm:text-2xl shadow-xl hover:scale-105 transition transform flex items-center justify-center gap-3 sm:gap-4">
                 <Icons.Car /> Order Now
             </button>
-            <div className="mt-6 sm:mt-8 flex items-center justify-center gap-4 sm:gap-6 text-stone-400">
+            <div className="mt-6 sm:mt-8 flex items-center justify-center gap-3 sm:gap-6 flex-wrap text-stone-400">
                 <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                     256-bit Encrypted
                 </div>
-                <div className="w-px h-3 bg-white/20"></div>
+                <div className="w-px h-3 bg-white/20 hidden sm:block"></div>
                 <div className="text-[10px] uppercase tracking-widest font-bold">Powered by Stripe</div>
-                <div className="w-px h-3 bg-white/20"></div>
+                <div className="w-px h-3 bg-white/20 hidden sm:block"></div>
                 <div className="text-[10px] uppercase tracking-widest font-bold">No App Download</div>
             </div>
         </div>
@@ -752,7 +1077,7 @@ const LandingPage = ({ setView, onAbout, openLegal }: any) => (
                             <li><button onClick={() => openLegal('faq')} className="hover:text-orange-400 transition">FAQ</button></li>
                             <li><button onClick={() => openLegal('contact')} className="hover:text-orange-400 transition">Contact Us</button></li>
                             <li><button onClick={() => setView('merch')} className="hover:text-orange-400 transition">Support the Founder</button></li>
-                            <li><a href="https://instagram.com/pullupcoffee.com.au" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 hover:text-orange-400 transition"><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>Instagram</a></li>
+                            <li><a href="https://instagram.com/pullupcoffee" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 hover:text-orange-400 transition"><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>Instagram</a></li>
                         </ul>
                     </div>
                     <div>
@@ -830,11 +1155,11 @@ const Sms2faToggle = ({ userId, db, profile }: { userId: string; db: any; profil
     );
 };
 
-const BusinessLogin = ({ setView, auth, openLegal }: any) => {
+const BusinessLogin = ({ setView, auth, openLegal, pending2faRef }: any) => {
     const [email, setEmail] = useState('');
     const [pass, setPass] = useState('');
     const [loadingAuth, setLoadingAuth] = useState(false);
-    const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+    const [showPass, setShowPass] = useState(false);
     const [otpChallenge, setOtpChallenge] = useState(false);
     const [otpInput, setOtpInput] = useState('');
     const [otpCafeId, setOtpCafeId] = useState<string | null>(null);
@@ -843,17 +1168,24 @@ const BusinessLogin = ({ setView, auth, openLegal }: any) => {
     const [forgotMode, setForgotMode] = useState(false);
     const [forgotEmail, setForgotEmail] = useState('');
     const [forgotSent, setForgotSent] = useState(false);
-    const captchaRef = useRef<any>(null);
-    const captchaEnabled = Boolean(RECAPTCHA_SITE_KEY);
+    const [loginCaptchaAnswer, setLoginCaptchaAnswer] = useState('');
+    const [loginCaptchaChallenge] = useState(() => {
+        const a = Math.floor(Math.random() * 9) + 1;
+        const b = Math.floor(Math.random() * 9) + 1;
+        return { a, b, answer: a + b };
+    });
+    const [loginCaptchaVerified, setLoginCaptchaVerified] = useState(false);
 
     const handleLogin = async (e: any) => {
         e.preventDefault();
-        if (captchaEnabled && !captchaToken) {
-            alert('Please complete the CAPTCHA verification.');
+        if (!loginCaptchaVerified) {
+            alert('Please complete the security check first.');
             return;
         }
         setLoadingAuth(true);
         try {
+            // Set pending 2FA flag BEFORE sign-in to prevent onAuthStateChanged from redirecting
+            if (pending2faRef) pending2faRef.current = true;
             const cred = await signInWithEmailAndPassword(auth, email, pass);
             const db = getFirestore();
             const cafeDoc = await getDoc(doc(db, 'cafes', cred.user.uid));
@@ -873,6 +1205,7 @@ const BusinessLogin = ({ setView, auth, openLegal }: any) => {
                     if (!res.ok) {
                         alert(data.error || 'Failed to send verification code.');
                         await signOut(auth);
+                        if (pending2faRef) pending2faRef.current = false;
                         setLoadingAuth(false);
                         setOtpSending(false);
                         return;
@@ -880,6 +1213,7 @@ const BusinessLogin = ({ setView, auth, openLegal }: any) => {
                 } catch {
                     alert('Unable to send verification code. Please try again.');
                     await signOut(auth);
+                    if (pending2faRef) pending2faRef.current = false;
                     setLoadingAuth(false);
                     setOtpSending(false);
                     return;
@@ -891,11 +1225,11 @@ const BusinessLogin = ({ setView, auth, openLegal }: any) => {
                 await signOut(auth);
                 return;
             }
-            // No 2FA, login complete — onAuthStateChanged will redirect
+            // No 2FA, login complete — clear pending flag and let onAuthStateChanged redirect
+            if (pending2faRef) pending2faRef.current = false;
         } catch (err: any) {
+            if (pending2faRef) pending2faRef.current = false;
             alert(err.message.replace('Firebase: ', '').replace('Error ', ''));
-            captchaRef.current?.reset();
-            setCaptchaToken(null);
         } finally {
             setLoadingAuth(false);
         }
@@ -920,15 +1254,14 @@ const BusinessLogin = ({ setView, auth, openLegal }: any) => {
                     setOtpChallenge(false);
                     setOtpAttempts(0);
                     setOtpCafeId(null);
-                    captchaRef.current?.reset();
-                    setCaptchaToken(null);
                 } else {
                     alert(data.error || `Incorrect code. ${3 - next} attempt(s) remaining.`);
                 }
                 setLoadingAuth(false);
                 return;
             }
-            // OTP verified — re-authenticate to enter dashboard
+            // OTP verified — clear 2FA gate and re-authenticate to enter dashboard
+            if (pending2faRef) pending2faRef.current = false;
             await signInWithEmailAndPassword(auth, email, pass);
             // onAuthStateChanged will handle redirect to dashboard
         } catch (err: any) {
@@ -976,7 +1309,7 @@ const BusinessLogin = ({ setView, auth, openLegal }: any) => {
                     <p className="text-stone-400 text-sm">Sign in to your partner dashboard.</p>
                 </div>
 
-                <div className="bg-[#1a1a1a] p-10 rounded-[2.5rem] shadow-2xl border border-stone-800/50 hover:border-orange-500/30 transition-colors">
+                <div className="bg-[#1a1a1a] p-6 sm:p-10 rounded-2xl sm:rounded-[2.5rem] shadow-2xl border border-stone-800/50 hover:border-orange-500/30 transition-colors">
                     <h2 className="text-2xl font-serif italic font-bold mb-1 text-white">Business Login</h2>
                     <p className="text-stone-500 text-[10px] uppercase tracking-[0.2em] mb-8 font-bold">Partner Dashboard Access</p>
                     
@@ -1042,14 +1375,20 @@ const BusinessLogin = ({ setView, auth, openLegal }: any) => {
                         </div>
                         <div>
                             <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-2">Password</label>
-                            <input type="password" value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••" minLength={6} className="w-full p-4 bg-[#0f0f0f] border border-stone-800 rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium" required />
-                        </div>
-                        {captchaEnabled && (
-                            <div className="flex justify-center">
-                                <ReCAPTCHA ref={captchaRef} sitekey={RECAPTCHA_SITE_KEY} theme="dark" onChange={(token: string | null) => setCaptchaToken(token)} onExpired={() => setCaptchaToken(null)} />
+                            <div className="relative">
+                                <input type={showPass ? 'text' : 'password'} value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••" minLength={6} className="w-full p-4 bg-[#0f0f0f] border border-stone-800 rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium pr-12" required />
+                                <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-stone-500 hover:text-stone-300 transition" tabIndex={-1} aria-label={showPass ? 'Hide password' : 'Show password'}>{showPass ? <Icons.EyeOff /> : <Icons.Eye />}</button>
                             </div>
-                        )}
-                        <button type="submit" disabled={loadingAuth || (captchaEnabled && !captchaToken)} className="w-full bg-orange-600 text-white py-5 rounded-2xl font-bold mt-4 hover:bg-orange-500 disabled:opacity-50 transition-all active:scale-95 uppercase tracking-widest text-sm shadow-[0_0_12px_rgba(249,115,22,0.25)]">
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-2">Security Check</label>
+                            <div className="flex items-center gap-3">
+                                <span className="text-white font-bold text-sm whitespace-nowrap">What is {loginCaptchaChallenge.a} + {loginCaptchaChallenge.b}?</span>
+                                <input type="text" inputMode="numeric" maxLength={2} value={loginCaptchaAnswer} onChange={e => { const v = e.target.value.replace(/\D/g, ''); setLoginCaptchaAnswer(v); setLoginCaptchaVerified(Number(v) === loginCaptchaChallenge.answer); }} placeholder="?" className="w-16 p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white font-bold text-center" />
+                                {loginCaptchaVerified && <span className="text-green-400 text-sm font-bold">✓</span>}
+                            </div>
+                        </div>
+                        <button type="submit" disabled={loadingAuth || !loginCaptchaVerified} className="w-full bg-orange-600 text-white py-5 rounded-2xl font-bold mt-4 hover:bg-orange-500 disabled:opacity-50 transition-all active:scale-95 uppercase tracking-widest text-sm shadow-[0_0_12px_rgba(249,115,22,0.25)]">
                             {loadingAuth ? (otpSending ? 'Sending Code...' : 'Signing In...') : 'SIGN IN'}
                         </button>
                         <button type="button" onClick={() => setForgotMode(true)} className="w-full text-stone-500 text-[10px] uppercase tracking-widest font-bold hover:text-orange-400 transition py-1">
@@ -1088,7 +1427,8 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
     const [pass, setPass] = useState('');
     const [confirmPass, setConfirmPass] = useState('');
     const [bizName, setBizName] = useState('');
-    const [phone, setPhone] = useState('');
+    const [storePhone, setStorePhone] = useState('');
+    const [ownerMobile, setOwnerMobile] = useState('');
     const [address, setAddress] = useState('');
     const [abn, setAbn] = useState('');
     const [googleBusinessUrl, setGoogleBusinessUrl] = useState('');
@@ -1097,9 +1437,48 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
     const [loadingAuth, setLoadingAuth] = useState(false);
     const [showExploreMore, setShowExploreMore] = useState(false);
     const [earlyAdopterSpotsLeft, setEarlyAdopterSpotsLeft] = useState<number | null>(null);
-    const [captchaToken, setCaptchaToken] = useState<string | null>(null);
-    const captchaRef = useRef<any>(null);
-    const captchaEnabled = Boolean(RECAPTCHA_SITE_KEY);
+    const [showPass, setShowPass] = useState(false);
+    const [showConfirmPass, setShowConfirmPass] = useState(false);
+    const [honeypot, setHoneypot] = useState('');
+    const [formLoadedAt] = useState(Date.now());
+    const [captchaAnswer, setCaptchaAnswer] = useState('');
+    const [captchaChallenge] = useState(() => {
+        const a = Math.floor(Math.random() * 9) + 1;
+        const b = Math.floor(Math.random() * 9) + 1;
+        return { a, b, answer: a + b };
+    });
+    const [captchaVerified, setCaptchaVerified] = useState(false);
+    const addressInputRef = useRef<HTMLInputElement>(null);
+    const [abnVerified, setAbnVerified] = useState<{ entityName: string; status: string } | null>(null);
+    const [abnError, setAbnError] = useState('');
+    const [abnChecking, setAbnChecking] = useState(false);
+    const [referralCode, setReferralCode] = useState('');
+    const [referralValid, setReferralValid] = useState<{ valid: boolean; affiliateName?: string } | null>(null);
+    const [referralChecking, setReferralChecking] = useState(false);
+    const [cafeCountry, setCafeCountry] = useState(() => typeof window !== 'undefined' ? detectCountry() : 'AU');
+    const countryConfig = getCountryConfig(cafeCountry);
+    const [addressSuggestions, setAddressSuggestions] = useState<string[]>([]);
+    const addressDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const fetchAddressSuggestions = useCallback((query: string) => {
+        if (addressDebounceRef.current) clearTimeout(addressDebounceRef.current);
+        addressDebounceRef.current = setTimeout(async () => {
+            try {
+                const countryCode = cafeCountry.toLowerCase();
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(query)}&countrycodes=${countryCode}&limit=5&addressdetails=1`);
+                if (!res.ok) return;
+                const results = await res.json();
+                const suggestions = results
+                    .filter((r: any) => r.display_name)
+                    .map((r: any) => {
+                        const a = r.address || {};
+                        const parts = [a.house_number, a.road, a.suburb || a.city || a.town || a.village, a.state, a.postcode].filter(Boolean);
+                        return parts.length >= 3 ? parts.join(', ') : r.display_name.split(',').slice(0, 5).join(',').trim();
+                    });
+                setAddressSuggestions(suggestions);
+            } catch { setAddressSuggestions([]); }
+        }, 350);
+    }, [cafeCountry]);
 
     useEffect(() => {
         const loadEarlyAdopterSpots = async () => {
@@ -1114,10 +1493,73 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
         loadEarlyAdopterSpots();
     }, [db]);
 
+    // Address autocomplete powered by OpenStreetMap Nominatim (free, no API key required)
+
+    // ABN verification on blur
+    const verifyAbn = useCallback(async () => {
+        const cleanAbn = abn.replace(/\D/g, '');
+        if (cleanAbn.length !== 11) {
+            setAbnVerified(null);
+            setAbnError(cleanAbn.length > 0 ? 'ABN must be 11 digits' : '');
+            return;
+        }
+        setAbnChecking(true);
+        setAbnError('');
+        setAbnVerified(null);
+        try {
+            const res = await fetch('/api/verify/abn', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ abn: cleanAbn }),
+            });
+            const data = await res.json();
+            if (data.valid) {
+                setAbnVerified({ entityName: data.entityName, status: data.status });
+                // Auto-fill business name if empty
+                if (!bizName && data.entityName) {
+                    setBizName(data.entityName);
+                }
+            } else {
+                setAbnError(data.error || 'ABN not found or inactive');
+            }
+        } catch {
+            setAbnError('Unable to verify ABN — please check manually');
+        } finally {
+            setAbnChecking(false);
+        }
+    }, [abn, bizName]);
+
+    // Referral code verification on blur
+    const verifyReferral = useCallback(async () => {
+        const code = referralCode.trim();
+        if (!code) { setReferralValid(null); return; }
+        if (code.length < 5) { setReferralValid({ valid: false }); return; }
+        setReferralChecking(true);
+        try {
+            const res = await fetch('/api/affiliate/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code }),
+            });
+            const data = await res.json();
+            setReferralValid(data);
+        } catch {
+            setReferralValid(null);
+        } finally {
+            setReferralChecking(false);
+        }
+    }, [referralCode]);
+
     const handleSignup = async (e: any) => {
         e.preventDefault();
-        if (captchaEnabled && !captchaToken) {
-            alert('Please complete the CAPTCHA verification.');
+        // Anti-bot: honeypot + timing check + CAPTCHA
+        if (honeypot) { alert('Spam detected.'); return; }
+        if (Date.now() - formLoadedAt < ANTI_BOT_MIN_MS) { alert('Please take a moment to review before submitting.'); return; }
+        if (!captchaVerified) { alert('Please complete the verification challenge before submitting.'); return; }
+        // Address validation: must look like a real address (number + words + state/postcode)
+        const addressTrimmed = address.trim();
+        if (addressTrimmed.length < 10 || !/\d/.test(addressTrimmed)) {
+            alert('Please enter a full street address (e.g. 123 Main Street, Maroochydore QLD 4558)');
             return;
         }
         setLoadingAuth(true);
@@ -1129,26 +1571,61 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
             const cafesSnapshot = await getDocs(collection(db, 'cafes'));
             const signupSequence = cafesSnapshot.size + 1;
             const earlyAdopterEligible = signupSequence <= EARLY_ADOPTER_CAFE_LIMIT;
+
+            // Anti-resignup: check if this ABN was previously approved (blocks affiliate bonus abuse)
+            let referralBlocked = false;
+            if (abn.trim()) {
+                const abnNormalized = abn.replace(/\s+/g, '').trim();
+                const existingByAbn = cafesSnapshot.docs.filter((d: any) => {
+                    const data = d.data();
+                    const docAbn = (data.abn || '').replace(/\s+/g, '').trim();
+                    return docAbn === abnNormalized && data.firstApprovedAt;
+                });
+                if (existingByAbn.length > 0) {
+                    referralBlocked = true;
+                }
+            }
+
             await setDoc(doc(db, 'cafes', res.user.uid), {
                 businessName: bizName,
-                phone: phone,
+                storePhone: storePhone,
+                ownerMobile: ownerMobile,
+                phone: ownerMobile, // backwards-compatible
                 address: address,
                 email: email,
                 abn: abn,
                 googleBusinessUrl: googleBusinessUrl,
                 businessDescription: businessDescription,
                 billingEmail: billingEmail || email,
+                country: cafeCountry,
                 isApproved: false,
                 status: 'closed',
-                curbsideFee: MIN_CURBSIDE_FEE,
+                curbsideFee: 2.0,
                 globalPricing: { milk: 0.50, syrup: 0.50, medium: 0.50, large: 1.00, extraShot: 0.50 },
                 audioTheme: 'modern',
                 appliedAt: new Date().toISOString(),
                 signupSequence,
                 earlyAdopterEligible,
-                transactionCostModel: earlyAdopterEligible ? 'platform-covers-all-stripe' : 'cafe-covers-stripe-percent',
-                stripePercentRate: earlyAdopterEligible ? 0 : 0.0175,
+                transactionCostModel: earlyAdopterEligible ? 'early-adopter-partner-bonus' : 'standard-service-fee',
+                platformServiceFee: 0.99,
+                earlyPartnerRebate: earlyAdopterEligible ? 0.25 : 0,
+                ...(referralCode.trim() && !referralBlocked ? { referredBy: referralCode.trim().toUpperCase() } : {}),
+                ...(referralBlocked ? { referralBlockedReason: 'ABN previously approved — anti-resignup guard' } : {}),
             });
+
+            // Geocode address to lat/lng for distance-based discovery (fire-and-forget)
+            try {
+                const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(address)}&countrycodes=au&limit=1`);
+                if (geoRes.ok) {
+                    const geoData = await geoRes.json();
+                    if (geoData.length > 0) {
+                        await updateDoc(doc(db, 'cafes', res.user.uid), {
+                            latitude: parseFloat(geoData[0].lat),
+                            longitude: parseFloat(geoData[0].lon),
+                        });
+                    }
+                }
+            } catch (geoErr) { console.error('Geocoding failed (non-blocking):', geoErr); }
 
             for (const item of DEFAULT_MENU_ITEMS) {
                 await addDoc(collection(db, 'cafes', res.user.uid, 'menu'), {
@@ -1157,7 +1634,7 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
                 });
             }
 
-            // Send signup confirmation email via Resend (fire-and-forget)
+            // Send signup confirmation + trigger auto-approval check (fire-and-forget)
             try {
                 const token = await res.user.getIdToken();
                 await fetch('/api/auth/signup-notify', {
@@ -1166,7 +1643,7 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`,
                     },
-                    body: JSON.stringify({ businessName: bizName, email }),
+                    body: JSON.stringify({ businessName: bizName, email, abn, address, googleBusinessUrl, storePhone, ownerMobile }),
                 });
             } catch (e) { console.error('Signup notification failed:', e); }
 
@@ -1175,8 +1652,6 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
             setView('merchant-login');
         } catch (err: any) {
             alert(err.message.replace('Firebase: ', '').replace('Error ', ''));
-            captchaRef.current?.reset();
-            setCaptchaToken(null);
         } finally {
             setLoadingAuth(false);
         }
@@ -1271,32 +1746,61 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
                             <p className="text-[9px] uppercase tracking-widest font-bold text-orange-300">Early Adopter Incentive</p>
                             <p className="text-xs text-stone-200 mt-1">
                                 {earlyAdopterSpotsLeft === null
-                                    ? 'First 33 partner cafes get platform-covered Stripe transaction costs.'
+                                    ? 'First 100 partner cafes receive a $0.25/order Partner Bonus for 12 months.'
                                     : earlyAdopterSpotsLeft > 0
-                                        ? `${earlyAdopterSpotsLeft} of ${EARLY_ADOPTER_CAFE_LIMIT} spots left for platform-covered Stripe transaction costs.`
-                                        : `All ${EARLY_ADOPTER_CAFE_LIMIT} early adopter spots are filled. New signups use the standard transaction model.`}
+                                        ? `${earlyAdopterSpotsLeft} of ${EARLY_ADOPTER_CAFE_LIMIT} spots left for the $0.25/order Partner Bonus (12 months).`
+                                        : `All ${EARLY_ADOPTER_CAFE_LIMIT} early adopter spots are filled. New signups use the standard $0.99 service fee model.`}
                             </p>
                         </div>
                         
                         <form onSubmit={handleSignup} className="space-y-4 sm:space-y-5">
+                            {/* Honeypot anti-bot field — invisible to humans */}
+                            <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', opacity: 0, height: 0, overflow: 'hidden' }} aria-hidden="true" tabIndex={-1}>
+                                <label>Leave this empty</label>
+                                <input type="text" name="website" value={honeypot} onChange={e => setHoneypot(e.target.value)} autoComplete="off" tabIndex={-1} />
+                            </div>
                             <div className="bg-stone-900/50 p-4 sm:p-5 rounded-xl border border-stone-700 mb-4 sm:mb-6">
                                 <p className="text-[9px] text-stone-400 uppercase tracking-widest mb-2.5 sm:mb-3 font-bold">📋 Business Information</p>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">Country</label>
+                                        <select value={cafeCountry} onChange={e => setCafeCountry(e.target.value)} className="w-full p-2.5 sm:p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm appearance-none">
+                                            {SUPPORTED_COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+                                        </select>
+                                    </div>
                                     <div>
                                         <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-2">Business Name</label>
                                         <input type="text" value={bizName} onChange={e => setBizName(e.target.value)} placeholder="Your Cafe" className="w-full p-2.5 sm:p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
                                     </div>
                                     <div>
-                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">ABN</label>
-                                        <input type="text" value={abn} onChange={e => setAbn(e.target.value)} placeholder="12 345 678 901" className="w-full p-2.5 sm:p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
+                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">{countryConfig.businessIdLabel} <span className="text-stone-600">(Business ID)</span></label>
+                                        <input type="text" value={abn} onChange={e => { setAbn(e.target.value); setAbnVerified(null); setAbnError(''); }} onBlur={verifyAbn} placeholder={countryConfig.businessIdPlaceholder} className={`w-full p-2.5 sm:p-3 bg-[#0f0f0f] border ${abnVerified ? 'border-green-600' : abnError ? 'border-red-600' : 'border-stone-800'} rounded-xl outline-none focus:border-orange-500 transition text-white text-sm`} />
+                                        <p className="text-[7px] text-stone-600 mt-0.5">Optional — can be added later in your dashboard</p>
+                                        {abnChecking && <p className="text-[8px] text-orange-400 mt-1 animate-pulse">Verifying ABN...</p>}
+                                        {abnVerified && <p className="text-[8px] text-green-400 mt-1">✓ {abnVerified.entityName} — {abnVerified.status}</p>}
+                                        {abnError && <p className="text-[8px] text-red-400 mt-1">✗ {abnError}</p>}
                                     </div>
                                     <div className="md:col-span-2">
                                         <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">Store Address</label>
-                                        <input type="text" value={address} onChange={e => setAddress(e.target.value)} placeholder="123 Main St, Sydney NSW" className="w-full p-2.5 sm:p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
+                                        <input ref={addressInputRef} type="text" value={address} onChange={e => { setAddress(e.target.value); if (e.target.value.length >= 5) { fetchAddressSuggestions(e.target.value); } else { setAddressSuggestions([]); } }} placeholder="Start typing your address..." className="w-full p-2.5 sm:p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required id="signup-address-autocomplete" autoComplete="off" />
+                                        {addressSuggestions.length > 0 && (
+                                            <div className="mt-1 bg-[#1a1a1a] border border-stone-700 rounded-xl max-h-48 overflow-y-auto z-50 relative">
+                                                {addressSuggestions.map((s, i) => (
+                                                    <button key={i} type="button" onClick={() => { setAddress(s); setAddressSuggestions([]); }} className="w-full text-left px-3 py-2 text-xs text-stone-300 hover:bg-orange-500/20 hover:text-white transition border-b border-stone-800/50 last:border-0">{s}</button>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <p className="text-[8px] text-stone-500 mt-1 italic">💡 Include street number, street name, suburb, state and postcode</p>
                                     </div>
                                     <div>
-                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">Phone Number</label>
-                                        <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="(02) XXXX XXXX" className="w-full p-2.5 sm:p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
+                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">Store Phone <span className="text-stone-600">(Public)</span></label>
+                                        <input type="tel" value={storePhone} onChange={e => setStorePhone(e.target.value)} placeholder="(02) XXXX XXXX" className="w-full p-2.5 sm:p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
+                                        <p className="text-[7px] text-stone-600 mt-0.5">Shown to customers for store enquiries</p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">Owner Mobile <span className="text-stone-600">(Private)</span></label>
+                                        <input type="tel" value={ownerMobile} onChange={e => setOwnerMobile(e.target.value)} placeholder="04XX XXX XXX" className="w-full p-2.5 sm:p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm" required />
+                                        <p className="text-[7px] text-stone-600 mt-0.5">For 2FA, notifications &amp; admin contact only — never shared</p>
                                     </div>
                                     <div>
                                         <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">Billing Email (opt)</label>
@@ -1312,6 +1816,19 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
                                     <textarea value={businessDescription} onChange={e => setBusinessDescription(e.target.value)} placeholder="What do you sell? Expected order volume? Peak hours?" rows={2} className="w-full p-2.5 sm:p-3 bg-[#0f0f0f] border border-stone-800 rounded-xl outline-none focus:border-orange-500 transition text-white text-sm resize-none" required />
                                     <p className="text-[8px] text-stone-500 mt-1 italic">✓ Approval within 1-3 business days</p>
                                 </div>
+                                <div className="mt-3 sm:mt-4">
+                                    <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">Referral Code <span className="text-stone-600">(Optional)</span></label>
+                                    <div className="relative">
+                                        <input type="text" value={referralCode} onChange={e => setReferralCode(e.target.value.toUpperCase())} onBlur={verifyReferral} placeholder="PULLUP-XXXXX" className={`w-full p-2.5 sm:p-3 bg-[#0f0f0f] border ${referralValid?.valid === true ? 'border-green-500' : referralValid?.valid === false ? 'border-red-500' : 'border-stone-800'} rounded-xl outline-none focus:border-orange-500 transition text-white text-sm uppercase tracking-wider`} />
+                                        {referralChecking && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-orange-400 animate-pulse text-xs">...</span>}
+                                        {!referralChecking && referralValid?.valid === true && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-green-400 text-sm">✓</span>}
+                                        {!referralChecking && referralValid?.valid === false && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-red-400 text-sm">✗</span>}
+                                    </div>
+                                    {referralValid?.valid === true && <p className="text-[8px] text-green-400 mt-1">Valid referral code{referralValid.affiliateName ? ` — referred by ${referralValid.affiliateName}` : ' — your affiliate will be rewarded!'}</p>}
+                                    {referralValid?.valid === false && referralCode.trim() && <p className="text-[8px] text-red-400 mt-1">Invalid referral code — please check and try again</p>}
+                                    {!referralCode.trim() && <p className="text-[8px] text-stone-600 mt-0.5">Were you referred by a Pull Up affiliate? Enter their code here.</p>}
+                                    <p className="text-[7px] text-amber-500/80 mt-1">⚠️ Referral codes cannot be applied retroactively. If you have a code, it must be entered now at signup. Affiliates will not receive commission if the code is added after registration.</p>
+                                </div>
                             </div>
                             <div>
                                 <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">Email Address</label>
@@ -1319,18 +1836,36 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
                             </div>
                             <div>
                                 <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">Password</label>
-                                <input type="password" value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••" minLength={6} className="w-full p-3 sm:p-4 bg-[#0f0f0f] border border-stone-800 rounded-xl sm:rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium" required />
+                                <div className="relative">
+                                    <input type={showPass ? 'text' : 'password'} value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••" minLength={6} className="w-full p-3 sm:p-4 bg-[#0f0f0f] border border-stone-800 rounded-xl sm:rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium pr-12" required />
+                                    <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-stone-500 hover:text-stone-300 transition" tabIndex={-1} aria-label={showPass ? 'Hide password' : 'Show password'}>{showPass ? <Icons.EyeOff /> : <Icons.Eye />}</button>
+                                </div>
                             </div>
                             <div>
                                 <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 sm:mb-2">Confirm Password</label>
-                                <input type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} placeholder="••••••••" minLength={6} className="w-full p-3 sm:p-4 bg-[#0f0f0f] border border-stone-800 rounded-xl sm:rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium" required />
-                            </div>
-                            {captchaEnabled && (
-                                <div className="flex justify-center">
-                                    <ReCAPTCHA ref={captchaRef} sitekey={RECAPTCHA_SITE_KEY} theme="dark" onChange={(token: string | null) => setCaptchaToken(token)} onExpired={() => setCaptchaToken(null)} />
+                                <div className="relative">
+                                    <input type={showConfirmPass ? 'text' : 'password'} value={confirmPass} onChange={e => setConfirmPass(e.target.value)} placeholder="••••••••" minLength={6} className="w-full p-3 sm:p-4 bg-[#0f0f0f] border border-stone-800 rounded-xl sm:rounded-2xl outline-none focus:border-orange-500 transition text-white font-medium pr-12" required />
+                                    <button type="button" onClick={() => setShowConfirmPass(!showConfirmPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-stone-500 hover:text-stone-300 transition" tabIndex={-1} aria-label={showConfirmPass ? 'Hide password' : 'Show password'}>{showConfirmPass ? <Icons.EyeOff /> : <Icons.Eye />}</button>
                                 </div>
-                            )}
-                            <button type="submit" disabled={loadingAuth || (captchaEnabled && !captchaToken)} className="w-full bg-orange-600 text-white py-4 sm:py-5 rounded-2xl font-bold mt-4 sm:mt-6 hover:bg-orange-500 disabled:opacity-50 transition-all active:scale-95 uppercase tracking-widest text-sm shadow-[0_0_12px_rgba(249,115,22,0.25)]">
+                            </div>
+
+                            {/* CAPTCHA Verification */}
+                            <div className={`p-4 rounded-xl border ${captchaVerified ? 'bg-green-900/20 border-green-700' : 'bg-stone-900/50 border-stone-700'} transition`}>
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className={`w-6 h-6 rounded border-2 flex items-center justify-center transition cursor-pointer ${captchaVerified ? 'bg-green-600 border-green-500' : 'border-stone-600 hover:border-orange-500'}`}>
+                                        {captchaVerified && <span className="text-white text-sm font-bold">✓</span>}
+                                    </div>
+                                    <p className="text-xs text-stone-300 font-semibold">{captchaVerified ? 'Verified — you are human' : 'Verify you are not a robot'}</p>
+                                </div>
+                                {!captchaVerified && (
+                                    <div className="flex items-center gap-3 mt-2">
+                                        <p className="text-sm text-stone-400 font-medium whitespace-nowrap">What is {captchaChallenge.a} + {captchaChallenge.b}?</p>
+                                        <input type="text" inputMode="numeric" value={captchaAnswer} onChange={e => { setCaptchaAnswer(e.target.value); if (parseInt(e.target.value) === captchaChallenge.answer) { setCaptchaVerified(true); } }} placeholder="?" className="w-16 p-2 bg-[#0f0f0f] border border-stone-700 rounded-lg text-center text-white text-sm outline-none focus:border-orange-500" maxLength={3} />
+                                    </div>
+                                )}
+                            </div>
+
+                            <button type="submit" disabled={loadingAuth || !captchaVerified} className="w-full bg-orange-600 text-white py-4 sm:py-5 rounded-2xl font-bold mt-4 sm:mt-6 hover:bg-orange-500 disabled:opacity-50 transition-all active:scale-95 uppercase tracking-widest text-sm shadow-[0_0_12px_rgba(249,115,22,0.25)]">
                                 {loadingAuth ? 'Processing...' : 'Submit Application'}
                             </button>
                         </form>
@@ -1414,7 +1949,7 @@ const SupportFounder = ({ setView }: any) => {
             <div className="flex-1 flex flex-col items-center justify-center p-6 pb-24">
                 <div className="w-full max-w-2xl text-center mb-12">
                     <PullUpLogo className="w-20 h-20 mx-auto mb-6" />
-                    <h2 className="text-4xl md:text-5xl font-serif font-bold text-stone-900 italic tracking-tighter leading-none mb-4">Buy the Founder a Coffee</h2>
+                    <h2 className="text-2xl sm:text-4xl md:text-5xl font-serif font-bold text-stone-900 italic tracking-tighter leading-none mb-4">Buy the Founder a Coffee</h2>
                     <p className="text-stone-500 text-lg leading-relaxed max-w-lg mx-auto">Pull Up Coffee is bootstrapped by a solo founder. Every contribution goes directly toward platform development, hosting, and keeping things running for partner cafes.</p>
                 </div>
 
@@ -1503,6 +2038,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
     const [botInput, setBotInput] = useState('');
     const [botChat, setBotChat] = useState([{ type: 'bot', text: 'Hi! I am your Pull Up Support Assistant. Ask me in plain language and I will give you the fastest action steps.' }]);
     const [showMostAsked, setShowMostAsked] = useState(false);
+    const [showWhyPullUp, setShowWhyPullUp] = useState(false);
     
     const [isOnline, setIsOnline] = useState(profile?.status === 'open');
     const [notifyFavoritesEnabled, setNotifyFavoritesEnabled] = useState(profile?.notifyFavoritesEnabled ?? true);
@@ -1524,6 +2060,10 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
     const [selectedHistoryOrder, setSelectedHistoryOrder] = useState<any | null>(null);
     const [supportTopicCounts, setSupportTopicCounts] = useState<Record<string, number>>(profile?.supportTopicCounts || {});
     const [supportWeekKey, setSupportWeekKey] = useState(profile?.supportWeekKey || '');
+    const [customFeeAmount, setCustomFeeAmount] = useState('');
+    const [customFeeReason, setCustomFeeReason] = useState('');
+    const [customFeeSending, setCustomFeeSending] = useState(false);
+    const [customFeeSent, setCustomFeeSent] = useState(false);
     const [businessNameDraft, setBusinessNameDraft] = useState(profile?.businessName || '');
     const [storefrontLogo, setStorefrontLogo] = useState<string | null>(profile?.logo || null);
     const [billingEmailDraft, setBillingEmailDraft] = useState(profile?.billingEmail || profile?.email || '');
@@ -1544,6 +2084,8 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
     });
     const [platformCafeRows, setPlatformCafeRows] = useState<any[]>([]);
     const [platformUpdatedAt, setPlatformUpdatedAt] = useState<string | null>(null);
+    const [platformAffiliates, setPlatformAffiliates] = useState<any[]>([]);
+    const [platformRecentOrders, setPlatformRecentOrders] = useState<any[]>([]);
     const quickSupportPrompts = [
         'How do I get paid?',
         'How do I change curbside fee?',
@@ -1554,7 +2096,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
     ];
     const logoFileInputRef = useRef<HTMLInputElement>(null);
     const isPlatformAdmin = profile?.isPlatformAdmin === true || profile?.role === 'platform_admin';
-    const isEarlyAdopter = profile?.transactionCostModel === 'platform-covers-all-stripe';
+    const isEarlyAdopter = profile?.transactionCostModel === 'early-adopter-partner-bonus';
     
     const [newItem, setNewItem] = useState({ name: '', price: '', img: null as string | null });
     const [editingMenuId, setEditingMenuId] = useState<string | null>(null);
@@ -1586,12 +2128,13 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
 
     const calculateOrderEconomics = (order: any) => {
         const menuRevenue = (order?.items || []).reduce((sum: number, item: any) => sum + Number(item?.price || 0), 0);
-        const curbsideFeeValue = Number(order?.fee || 2);
-        const cafeCurbsideShare = curbsideFeeValue * 0.8;
-        const stripePercentCost = (menuRevenue + cafeCurbsideShare) * Number(stripePercentRate || 0);
-        const extraRevenue = Math.max(cafeCurbsideShare - stripePercentCost, 0);
+        const curbsideFeeValue = Number(order?.fee || 0);
+        const totalOrderValue = menuRevenue + curbsideFeeValue;
+        const estimatedStripeFee = (totalOrderValue + PLATFORM_SERVICE_FEE) * 0.0175 + 0.30;
+        const cafeNetRevenue = totalOrderValue - estimatedStripeFee;
+        const extraRevenue = Math.max(curbsideFeeValue - estimatedStripeFee, 0);
         const upliftPct = menuRevenue > 0 ? (extraRevenue / menuRevenue) * 100 : 0;
-        return { menuRevenue, curbsideFeeValue, cafeCurbsideShare, stripePercentCost, extraRevenue, upliftPct };
+        return { menuRevenue, curbsideFeeValue, totalOrderValue, estimatedStripeFee, cafeNetRevenue, extraRevenue, upliftPct };
     };
 
     const notifyFavoritesNow = async () => {
@@ -1712,6 +2255,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                     id: c.id,
                     businessName: c.businessName || 'Unnamed Cafe',
                     status: c.status === 'open' ? 'open' : 'closed',
+                    isApproved: c.isApproved === true,
                     activeOrders: activeOrdersByCafe[c.id] || 0,
                     payoutPreference: c.payoutPreference || 'daily',
                     stripeConnected: Boolean(c.stripeConnected || c.stripeAccountId),
@@ -1738,6 +2282,12 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                 feeFlowToday,
             });
             setPlatformUpdatedAt(new Date().toISOString());
+
+            // Recent orders feed (last 10)
+            const recent = [...ordersCache]
+                .sort((a: any, b: any) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime())
+                .slice(0, 10);
+            setPlatformRecentOrders(recent);
         };
 
         const startOfDay = new Date();
@@ -1754,9 +2304,16 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
             recompute();
         });
 
+        // Load affiliates
+        const unsubAffiliates = onSnapshot(collection(db, 'affiliates'), (snap) => {
+            const affList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+            setPlatformAffiliates(affList);
+        });
+
         return () => {
             unsubCafes();
             unsubOrders();
+            unsubAffiliates();
         };
     }, [db, isPlatformAdmin]);
 
@@ -1826,19 +2383,32 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
     const connectStripeOnboarding = async () => {
         try {
             const token = await getAuthToken();
+            if (!token) {
+                alert('Please log in again before connecting Stripe.');
+                return;
+            }
             const res = await fetch('/api/stripe/connect', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                    'Authorization': `Bearer ${token}`,
                 },
-                body: JSON.stringify({ email: profile?.email, businessName: profile?.businessName, cafeId: user?.uid, referralCode: 'SCOUT_001' })
+                body: JSON.stringify({ email: profile?.email, businessName: profile?.businessName, cafeId: user?.uid })
             });
             const data = await res.json();
             if (data.url) window.location.href = data.url;
-            else alert('Error: ' + (data.error || 'Unable to connect Stripe'));
+            else {
+                const errorMsg = data.error || 'Unable to connect Stripe';
+                if (errorMsg.includes('signed up for Connect')) {
+                    alert('Stripe Connect has not been enabled on the platform Stripe account yet. The Pull Up team needs to activate Connect at stripe.com/connect before cafes can onboard. This is being resolved — you will be notified once payouts are ready.');
+                } else if (errorMsg.includes('not configured')) {
+                    alert('Stripe Connect is not yet configured on this platform. Please contact hello@pullupcoffee.com for assistance.');
+                } else {
+                    alert('Stripe Connect error: ' + errorMsg + '. If this persists, email hello@pullupcoffee.com.');
+                }
+            }
         } catch (err) {
-            alert('Network error connecting to Stripe.');
+            alert('Network error connecting to Stripe. Please check your internet and try again.');
         }
     };
 
@@ -1872,32 +2442,36 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
         const q = question.toLowerCase();
         setBotInput('');
 
-        setTimeout(() => {
+        setTimeout(async () => {
             const knowledgeBase = [
-                { id: 'payouts', keywords: ['payout', 'paid', 'bank', 'money', 'stripe', 'transfer', 'settlement', 'earnings', 'income', 'revenue'], text: 'Fast answer: go to Payments → Connect Stripe Payouts, then choose daily/weekly/instant. Once connected, payouts go to your nominated bank account automatically. You keep 100% of menu prices + 80% of the curbside fee. Stripe processing is passed through to the customer.' },
-                { id: 'curbside-fee', keywords: ['curbside', 'fee', 'change fee', 'increase fee', 'minimum', 'pricing', 'price', 'charge', 'cost', 'expensive'], text: 'Fast answer: go to Operations → Dynamic Curbside Fee and use the slider. Range is $2.00–$6.00. You keep 80%, platform keeps 20%. Stripe processing fees are transparently passed to the customer. Increase during peak hours, lower for promos.' },
-                { id: 'pause-orders', keywords: ['pause', 'offline', 'stop orders', 'busy', 'turn off', 'close', 'closing', 'shut down', 'status'], text: 'Fast answer: go to Operations and toggle Accepting Orders to OFFLINE. Customers stop seeing you as available instantly. Toggle back to ONLINE when ready.' },
-                { id: 'menu', keywords: ['menu', 'add item', 'first item', 'edit item', 'photo', 'price', 'food', 'drink', 'product', 'image'], text: 'Fast answer: go to Menu tab. Tap Add Item, set name + price, upload a photo, then save. Use "Load Top 7 Menu" for quick starter items. You can edit/delete anytime.' },
-                { id: 'late-customer', keywords: ['late', 'no show', 'grace', 'forfeit', 'did not arrive', 'waiting', 'customer not here'], text: 'Fast answer: customers have a 10-minute grace window. If they do not arrive, you can forfeit the order at your discretion. The authorization hold is released — they are not charged.' },
-                { id: 'decline', keywords: ['decline', 'reject', 'cancel order', 'cannot make', 'refuse'], text: 'Fast answer: on a pending order, tap the red X, enter a reason, and submit. The customer is notified and the authorization hold is voided (no charge).' },
-                { id: 'delay', keywords: ['delay', 'running late', 'sms', 'message customer', 'notify', 'update'], text: 'Fast answer: open a preparing/ready order and tap Notify Delay (SMS). Customer gets an instant SMS update. You can also mark orders as "Ready" to notify them.' },
-                { id: 'favorites', keywords: ['favourite', 'favorite', 'heart', 'sms alert', 'opening alert', 'regulars', 'loyalty'], text: 'Fast answer: customers can heart your cafe, then confirm their mobile at checkout. You send opted-in opening SMS from Operations → Notify Favourites. Safety guard: opening alert only sends once per day.' },
-                { id: 'refund', keywords: ['refund', 'chargeback', 'dispute', 'wrong order', 'cold', 'complaint', 'unhappy'], text: 'Fast answer: refunds are merchant-managed. Handle case-by-case. For unactioned orders, authorizations void automatically. For captured payments, process refunds via your Stripe dashboard.' },
-                { id: 'reporting', keywords: ['history', 'report', 'export', 'tax', 'accounting', 'gst', 'records', 'analytics'], text: 'Fast answer: use History tab filters (daily/weekly/monthly/archive) for quick bookkeeping summaries. Stripe also provides exportable reports for your accountant/BAS.' },
-                { id: 'support', keywords: ['human', 'support', 'ticket', 'help', 'contact', 'broken', 'bug', 'glitch', 'issue', 'problem', 'error'], text: 'Fast answer: email hello@pullupcoffee.com.au with your Cafe Name, issue, and (if relevant) Order ID. Priority escalation within 15 min during business hours (Mon–Fri 8AM–6PM AEDT).' },
-                { id: 'onboarding', keywords: ['training', 'tutorial', 'video', 'setup', 'started', 'new', 'first time', 'how to use', 'walkthrough'], text: 'Fast answer: watch the 2-minute Setup Walkthrough and Live Order Flow videos in this Support tab. They cover everything from sign-up to accepting your first live order.' },
-                { id: 'gps', keywords: ['gps', 'location', 'distance', 'tracking', 'approaching', 'arrived', 'customer location'], text: 'Fast answer: when GPS is enabled, you see real-time distance to approaching customers on Live Orders. The system auto-detects arrivals within ~80m. Customers can also manually tap "I\'m Outside" to alert you.' },
+                { id: 'payouts', keywords: ['payout', 'paid', 'bank', 'money', 'stripe', 'transfer', 'settlement', 'earnings', 'income', 'revenue', 'get paid', 'when paid', 'where money', 'my money', 'account'], text: 'Fast answer: go to Payments → Connect Stripe Payouts, then choose daily/weekly/instant. Once connected, payouts go to your nominated bank account automatically. You keep 100% of menu prices + 100% of the curbside fee. Customers pay a flat $0.99 service fee to Pull Up.' },
+                { id: 'curbside-fee', keywords: ['curbside', 'fee', 'change fee', 'increase fee', 'minimum', 'pricing', 'price', 'charge', 'cost', 'expensive', 'how much'], text: 'Fast answer: go to Operations → Dynamic Curbside Fee and use the slider. Range is $0.00–$25.00 — completely your choice. You keep 100% of the curbside fee. Customers also pay a flat $0.99 Pull Up service fee. Email hello@pullupcoffee.com to request above $25.' },
+                { id: 'pause-orders', keywords: ['pause', 'offline', 'stop orders', 'busy', 'turn off', 'close', 'closing', 'shut down', 'status', 'go offline', 'stop accepting'], text: 'Fast answer: go to Operations and toggle Accepting Orders to OFFLINE. Customers stop seeing you as available instantly. Toggle back to ONLINE when ready.' },
+                { id: 'menu', keywords: ['menu', 'add item', 'first item', 'edit item', 'photo', 'price', 'food', 'drink', 'product', 'image', 'add coffee', 'change price', 'upload photo', 'edit menu'], text: 'Fast answer: go to Menu tab. Tap Add Item, set name + price, upload a photo, then save. Use "Load Top 7 Menu" for quick starter items. You can edit/delete anytime.' },
+                { id: 'late-customer', keywords: ['late', 'no show', 'grace', 'forfeit', 'did not arrive', 'waiting', 'customer not here', 'not coming', 'no pickup'], text: 'Fast answer: customers have a 10-minute grace window. If they do not arrive, you can forfeit the order at your discretion. The authorization hold is released — they are not charged.' },
+                { id: 'decline', keywords: ['decline', 'reject', 'cancel order', 'cannot make', 'refuse', 'deny order'], text: 'Fast answer: on a pending order, tap the red X, enter a reason, and submit. The customer is notified and the authorization hold is voided (no charge).' },
+                { id: 'delay', keywords: ['delay', 'running late', 'sms', 'message customer', 'notify', 'update', 'tell customer', 'inform customer'], text: 'Fast answer: open a preparing/ready order and tap Notify Delay (SMS). Customer gets an instant SMS update. You can also mark orders as "Ready" to notify them.' },
+                { id: 'favorites', keywords: ['favourite', 'favorite', 'heart', 'sms alert', 'opening alert', 'regulars', 'loyalty', 'notification', 'alerts'], text: 'Fast answer: customers can heart your cafe, then confirm their mobile at checkout. You send opted-in opening SMS from Operations → Notify Favourites. Safety guard: opening alert only sends once per day.' },
+                { id: 'refund', keywords: ['refund', 'chargeback', 'dispute', 'wrong order', 'cold', 'complaint', 'unhappy', 'bad order', 'incorrect'], text: 'Fast answer: refunds are merchant-managed. Handle case-by-case. For unactioned orders, authorizations void automatically. For captured payments, process refunds via your Stripe dashboard.' },
+                { id: 'reporting', keywords: ['history', 'report', 'export', 'tax', 'accounting', 'gst', 'records', 'analytics', 'sales', 'data', 'numbers'], text: 'Fast answer: use History tab filters (daily/weekly/monthly/archive) for quick bookkeeping summaries. Stripe also provides exportable reports for your accountant/BAS.' },
+                { id: 'support', keywords: ['human', 'support', 'ticket', 'help', 'contact', 'broken', 'bug', 'glitch', 'issue', 'problem', 'error', 'not working', 'doesnt work', 'doesn\'t work', 'wrong', 'fix', 'urgent', 'emergency', 'speak to someone', 'talk to someone', 'real person'], text: 'Fast answer: email hello@pullupcoffee.com with your Cafe Name, issue, and (if relevant) Order ID. Priority escalation within 15 min during business hours (Mon–Fri 8AM–6PM AEDT). Your question has been forwarded to the Pull Up support team.' },
+                { id: 'onboarding', keywords: ['training', 'tutorial', 'video', 'setup', 'started', 'new', 'first time', 'how to use', 'walkthrough', 'getting started', 'begin', 'learn'], text: 'Fast answer: watch the 2-minute Setup Walkthrough and Live Order Flow videos in this Support tab. They cover everything from sign-up to accepting your first live order.' },
+                { id: 'gps', keywords: ['gps', 'location', 'distance', 'tracking', 'approaching', 'arrived', 'customer location', 'map', 'find me', 'where am i'], text: 'Fast answer: when GPS is enabled, you see real-time distance to approaching customers on Live Orders. The system auto-detects arrivals within ~80m. Customers can also manually tap "I\'m Outside" to alert you.' },
                 { id: 'qr', keywords: ['qr', 'poster', 'print', 'scan', 'code'], text: 'Fast answer: go to Account tab → Generate QR Poster. It creates a printable A4 poster with your cafe QR code, business name, and "Scan to Order" branding. Place it near your curbside area.' },
-                { id: 'hours', keywords: ['hours', 'schedule', 'open time', 'close time', 'operating', 'window', 'when'], text: 'Fast answer: go to Operations → Operating Window. Set your open/close times. You must also be toggled ONLINE for customers to see you. The schedule is a guide — the online toggle is the master control.' },
-                { id: 'logo', keywords: ['logo', 'branding', 'brand', 'image', 'avatar', 'profile picture'], text: 'Fast answer: go to Account tab → Upload Logo. Use a square image for best results. Your logo appears in Discovery, menu view, and order notifications.' },
-                { id: 'affiliate', keywords: ['affiliate', 'referral', 'commission', 'refer', 'earn'], text: 'Fast answer: Pull Up offers a 25% affiliate commission on the platform fee for the first 30 days of every cafe you refer. Email hello@pullupcoffee.com.au with "Affiliate Interest" to receive your unique link and marketing assets.' },
-                { id: 'security', keywords: ['security', 'safe', 'data', 'privacy', 'personal info', 'card details', 'encryption'], text: 'Fast answer: all payments are processed through Stripe with 256-bit encryption. We never store card numbers. Customer data is encrypted and GPS data is purged after order completion. Full Privacy Act 1988 compliance.' },
-                { id: 'early-adopter', keywords: ['early adopter', 'founders', 'first 33', 'special', 'benefit', 'bonus'], text: 'Fast answer: the first 33 cafe partners are "Early Adopters" — you keep 100% of your menu prices + 80% of the curbside fee with zero platform commission on menu items. This is locked in permanently for qualifying accounts.' },
-                { id: 'merch', keywords: ['merch', 'merchandise', 'hat', 'cap', 'founders', 'shop', 'buy'], text: 'Fast answer: visit the Merch Store from the main menu to grab limited-edition Pull Up Founders gear. Currently available: embroidered caps with AU shipping.' },
+                { id: 'hours', keywords: ['hours', 'schedule', 'open time', 'close time', 'operating', 'window', 'when open', 'business hours', 'opening hours', 'times'], text: 'Fast answer: go to Operations → Operating Window. Set your open/close times. You must also be toggled ONLINE for customers to see you. The schedule is a guide — the online toggle is the master control.' },
+                { id: 'logo', keywords: ['logo', 'branding', 'brand', 'image', 'avatar', 'profile picture', 'upload logo', 'change logo'], text: 'Fast answer: go to Account tab → Upload Logo. Use a square image for best results. Your logo appears in Discovery, menu view, and order notifications.' },
+                { id: 'affiliate', keywords: ['affiliate', 'referral', 'commission', 'refer', 'earn', 'refer a friend', 'invite'], text: 'Fast answer: Pull Up offers a 25% affiliate commission on the $0.99 platform fee (≈$0.25) for the first 30 days of every cafe you refer. Click "Affiliate (25% first month)" in the footer to apply instantly and get your unique referral code.' },
+                { id: 'security', keywords: ['security', 'safe', 'data', 'privacy', 'personal info', 'card details', 'encryption', 'protect'], text: 'Fast answer: all payments are processed through Stripe with 256-bit encryption. We never store card numbers. Customer data is encrypted and GPS data is purged after order completion. Full Privacy Act 1988 compliance.' },
+                { id: 'early-adopter', keywords: ['early adopter', 'founders', 'first 33', 'first 100', 'special', 'benefit', 'bonus', 'early bird'], text: 'Fast answer: the first 100 cafe partners are "Early Adopters" — you keep 100% of your menu prices + 100% of the curbside fee, and receive a $0.25/order Partner Bonus for 12 months. Standard Stripe processing applies as a normal business cost.' },
+                { id: 'merch', keywords: ['merch', 'merchandise', 'hat', 'cap', 'founders', 'shop', 'buy', 'gear', 'clothing'], text: 'Fast answer: visit the Merch Store from the main menu to grab limited-edition Pull Up Founders gear. Currently available: embroidered caps with AU shipping.' },
+                { id: 'approval', keywords: ['approv', 'pending', 'waiting', 'review', 'application', 'when will', 'not approved', 'approval email', 'didn\'t get', 'didnt get', 'not received', 'haven\'t received', 'havent received', 'missing email', 'no email', 'no sms', 'where is my', 'how long'], text: 'Fast answer: approvals are typically processed within 24 hours. Once approved, you will receive an email and SMS notification. If you have been waiting more than 24 hours, please email hello@pullupcoffee.com with your business name and we will prioritise your review.' },
+                { id: 'login', keywords: ['login', 'log in', 'sign in', 'can\'t login', 'cant login', 'locked out', 'forgot password', 'reset password', 'password reset', '2fa', 'two factor', 'verification code', 'otp'], text: 'Fast answer: if you forgot your password, go to Account → Reset Password. If you enabled 2FA, a 6-digit code will be sent to your mobile when you log in. Make sure to check your SMS. If you\'re still stuck, email hello@pullupcoffee.com.' },
+                { id: 'order-issues', keywords: ['order', 'missing order', 'where is', 'not showing', 'no orders', 'orders not', 'can\'t see', 'cant see'], text: 'Fast answer: make sure you are toggled ONLINE in Operations → Accepting Orders. Orders only appear when your store is online. Check the Live Orders tab for incoming orders. If you believe there\'s a technical issue, email hello@pullupcoffee.com.' },
+                { id: 'connect', keywords: ['connect stripe', 'stripe connect', 'link bank', 'bank account', 'onboarding', 'stripe setup', 'connect payouts'], text: 'Fast answer: go to Payments → Connect Stripe Payouts. Click the button to start Stripe Express onboarding. You will be redirected to Stripe to enter your business and bank details. Once complete, payouts are automatic.' },
             ];
 
             const match = knowledgeBase.find(topic => topic.keywords.some(k => q.includes(k)));
-            let answer = 'Fast answer: ask me in one sentence (example: "How do I get paid?" or "How do I pause orders?"). I will reply with exact clicks.';
+            let answer = '';
             let topicId = 'other';
 
             if (q.includes('password') || q.includes('token') || q.includes('private key') || q.includes('api key') || q.includes('customer card') || q.includes('secret')) {
@@ -1906,11 +2480,39 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
             } else if (match) {
                 answer = match.text;
                 topicId = match.id;
+            } else {
+                // No match — provide helpful fallback and forward to support
+                answer = `I couldn't find an exact answer for that. Your question has been forwarded to the Pull Up support team and they will respond within 24 hours. In the meantime, you can also email hello@pullupcoffee.com directly. Try asking about: payouts, menu, curbside fees, orders, approval status, Stripe setup, or account settings.`;
+                // Save the unanswered question to Firestore for support follow-up
+                try {
+                    await addDoc(collection(db, 'support_tickets'), {
+                        cafeId: user?.uid || 'unknown',
+                        cafeName: profile?.businessName || 'Unknown',
+                        cafeEmail: profile?.email || '',
+                        question: question,
+                        status: 'open',
+                        createdAt: new Date().toISOString(),
+                        source: 'chatbot',
+                    });
+                } catch (ticketErr) { console.error('Failed to save support ticket:', ticketErr); }
             }
 
-            if (topicId === 'support' && (q.includes('ticket') || q.includes('human') || q.includes('help'))) {
+            if (topicId === 'support' && (q.includes('ticket') || q.includes('human') || q.includes('help') || q.includes('not working') || q.includes('broken'))) {
                 const ticketId = Math.floor(100000 + Math.random() * 900000);
-                answer += ` Ticket #${ticketId}. Include this in your email for faster triage.`;
+                answer += ` Ref #${ticketId}. Include this in your email for faster triage.`;
+                // Also save support ticket
+                try {
+                    await addDoc(collection(db, 'support_tickets'), {
+                        cafeId: user?.uid || 'unknown',
+                        cafeName: profile?.businessName || 'Unknown',
+                        cafeEmail: profile?.email || '',
+                        question: question,
+                        ticketId: ticketId,
+                        status: 'open',
+                        createdAt: new Date().toISOString(),
+                        source: 'chatbot-escalation',
+                    });
+                } catch (ticketErr) { console.error('Failed to save support ticket:', ticketErr); }
             }
 
             const activeWeek = getWeekKey(new Date());
@@ -1952,7 +2554,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                     )}
                     <div><h2 className="text-xl font-serif italic text-white leading-tight">{businessNameDraft || profile?.businessName || 'Cafe Dashboard'}</h2><p className="text-[10px] uppercase text-[#ff5e00] tracking-[0.2em] font-bold">Partner Dashboard</p></div>
                 </div>
-                <button onClick={async () => { await signOut(auth); window.location.href = '/'; }} className="text-[10px] uppercase font-bold text-stone-400 hover:text-white transition">LOGOUT</button>
+                <button onClick={async () => { try { if (user?.uid) await updateDoc(doc(db, 'cafes', user.uid), { status: 'closed' }); } catch {} await signOut(auth); window.location.href = '/'; }} className="text-[10px] uppercase font-bold text-stone-400 hover:text-white transition">LOGOUT</button>
             </div>
             
             <div className="flex bg-white border-b border-stone-200 shadow-sm sticky top-0 z-20 overflow-x-auto no-scrollbar">
@@ -1970,7 +2572,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                         orders.map(o => (
                             <div key={o.id} className={`p-6 bg-white rounded-[2rem] border transition-all shadow-sm ${o.isArriving ? 'ring-4 ring-green-400' : 'border-stone-200'}`}>
                                 <div className="flex justify-between items-start mb-4">
-                                    <div><h4 className="text-xl font-bold text-stone-900 leading-tight">{o.customerName}</h4><p className="text-xs text-stone-500 font-mono uppercase mt-1 tracking-widest">{o.carDetails} • {o.plate}</p></div>
+                                    <div><h4 className="text-xl font-bold text-stone-900 leading-tight">{o.customerName}</h4><p className="text-xs text-stone-500 font-mono uppercase mt-1 tracking-widest">{o.carDetails} • {o.plate}</p>{o.pickupTime && o.pickupTime !== 'ASAP' && <p className="text-[10px] font-bold mt-1 text-orange-600 bg-orange-50 inline-block px-2 py-0.5 rounded-full">🕐 Pickup: {o.pickupTime}</p>}</div>
                                     <span className={`px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest ${o.status === 'pending' ? 'bg-amber-100 text-amber-700' : o.status === 'preparing' ? 'bg-blue-100 text-blue-700' : o.status === 'ready' ? 'bg-green-100 text-green-700' : 'bg-stone-100 text-stone-600'}`}>{o.status}</span>
                                 </div>
                                 {(o.approachState === 'approaching' || o.isArriving) && (
@@ -2065,7 +2667,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                                         statusNote: `${profile?.businessName || 'Cafe'} is running about 5 mins behind.`,
                                         statusUpdatedAt: new Date().toISOString()
                                     });
-                                    if(o.mobile) sendSMS(o.mobile, `Pull Up Coffee: ${profile?.businessName} is running about 5 mins behind. Thanks for your patience!`); 
+                                    if(o.mobile) sendSMS(o.mobile, 'delay', { cafeName: profile?.businessName || 'Your cafe' }, o.id); 
                                     alert("Delay SMS Sent!"); 
                                 }} className="w-full mt-2 py-3 text-[10px] text-stone-500 font-bold uppercase tracking-widest border border-stone-200 rounded-xl hover:bg-stone-50 transition">Notify Delay (SMS)</button>}
                             </div>
@@ -2074,7 +2676,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                 )}
 
                 {tab === 'history' && (
-                    <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-stone-200">
+                    <div className="bg-white p-4 sm:p-8 rounded-[2rem] shadow-sm border border-stone-200">
                         <div className="flex flex-col gap-4 mb-6">
                             <h3 className="font-bold text-xl text-stone-900">Order History</h3>
                             <div className="flex flex-wrap gap-2">
@@ -2116,7 +2718,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                             <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4 mb-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
                                 <div><p className="text-[10px] text-stone-500 uppercase tracking-widest font-bold">Orders</p><p className="text-xl font-bold text-stone-900">{summary.totalOrders}</p></div>
                                 <div><p className="text-[10px] text-stone-500 uppercase tracking-widest font-bold">Menu Revenue</p><p className="text-xl font-bold text-stone-900">${summary.totalMenu.toFixed(2)}</p></div>
-                                <div><p className="text-[10px] text-stone-500 uppercase tracking-widest font-bold">Extra from Platform</p><p className="text-xl font-bold text-orange-600">${summary.totalExtra.toFixed(2)}</p></div>
+                                <div><p className="text-[10px] text-stone-500 uppercase tracking-widest font-bold">Net Curbside</p><p className="text-xl font-bold text-orange-600">${summary.totalExtra.toFixed(2)}</p></div>
                                 <div><p className="text-[10px] text-stone-500 uppercase tracking-widest font-bold">Est. SMS Costs</p><p className="text-xl font-bold text-stone-500">~${(summary.totalOrders * 2 * SMS_COST_PER_MESSAGE).toFixed(2)}</p><p className="text-[8px] text-stone-400 mt-1">~2 SMS/order × ${SMS_COST_PER_MESSAGE.toFixed(2)}</p></div>
                             </div>
                             <div className="space-y-3">
@@ -2143,10 +2745,10 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                                         return (
                                             <div className="text-sm text-stone-700 space-y-2">
                                                 <p><strong>Menu Items:</strong> ${econ.menuRevenue.toFixed(2)}</p>
-                                                <p><strong>Curbside Fee:</strong> ${econ.curbsideFeeValue.toFixed(2)} (Cafe share: ${econ.cafeCurbsideShare.toFixed(2)})</p>
-                                                <p><strong>Stripe % Cost (est):</strong> -${econ.stripePercentCost.toFixed(2)} at {(Number(stripePercentRate) * 100).toFixed(2)}%</p>
-                                                <p><strong>Extra Revenue (Pull Up Platform):</strong> <span className="text-orange-600 font-bold">+${econ.extraRevenue.toFixed(2)}</span></p>
-                                                <p className="text-[10px] text-stone-500 italic mt-1">This is your net gain from using Pull Up vs traditional walk-in sales.</p>
+                                                <p><strong>Curbside Fee:</strong> ${econ.curbsideFeeValue.toFixed(2)} (100% yours)</p>
+                                                <p><strong>Est. Stripe Fee:</strong> -${econ.estimatedStripeFee.toFixed(2)}</p>
+                                                <p><strong>Net Revenue:</strong> <span className="text-orange-600 font-bold">${econ.cafeNetRevenue.toFixed(2)}</span></p>
+                                                <p className="text-[10px] text-stone-500 italic mt-1">You keep 100% of menu prices + 100% of curbside fee, minus Stripe processing.</p>
                                                 <p><strong>Estimated Revenue Uplift:</strong> {econ.upliftPct.toFixed(1)}%</p>
                                             </div>
                                         );
@@ -2159,7 +2761,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                 )}
 
                 {tab === 'menu' && (
-                    <div className="bg-white p-8 rounded-[2rem] border border-stone-200 shadow-sm space-y-8">
+                    <div className="bg-white p-4 sm:p-8 rounded-[2rem] border border-stone-200 shadow-sm space-y-8">
                         <div>
                             <h3 className="font-bold text-xl mb-6 text-stone-900">Store Menu Setup</h3>
                             <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4 mb-6">
@@ -2225,7 +2827,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
 
                 {tab === 'operations' && (
                     <div className="space-y-6">
-                        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-stone-200 space-y-8">
+                        <div className="bg-white p-4 sm:p-8 rounded-[2rem] shadow-sm border border-stone-200 space-y-8">
                             <div className="flex items-center justify-between p-5 bg-stone-50 rounded-xl border border-stone-200">
                                 <div><span className="font-bold text-stone-900 block">Accepting Orders</span><span className="text-xs text-stone-500">Visibility on customer maps</span></div>
                                 <div onClick={async () => { 
@@ -2286,16 +2888,45 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                                 </div>
                                 <div className="mt-3 bg-orange-50 border border-orange-100 rounded-xl p-4 text-xs text-stone-700 space-y-2">
                                     <p className="font-bold text-orange-600">{isEarlyAdopter ? '💰 This is Your Cream on Top' : '💰 Curbside Fee Settings'}</p>
-                                    <p>The curbside fee is charged to customers for the convenience of curbside service. <strong>Range: $2.00 – $6.00</strong> to protect profitability while staying customer-friendly.</p>
-                                    <p><strong>Dynamic Pass-Through Model:</strong> Pull Up acts as a transparent payment bridge. We add Stripe processing costs (1.75% + 30¢) on top of the order total so your cafe receives the full menu price. You keep <strong>80%</strong> of the curbside fee — your revenue, your margin.</p>
-                                    <p><strong>What You Keep:</strong> 100% of your menu prices + 80% of the curbside fee. Pull Up only retains the 20% platform share (which covers SMS, hosting, support, and development).</p>
-                                    {!isEarlyAdopter && <p><strong>Stripe Costs:</strong> Processing fees are transparently passed through to the customer — never deducted from your earnings.</p>}
-                                    <p className="text-[10px] text-stone-500 italic mt-2">💡 Increase during peak hours, lower for promotions. Min $5.00 cart required for customers.</p>
+                                    <p>The curbside fee is charged to customers for the convenience of curbside service. <strong>Range: $0.00 – $25.00</strong> — completely your choice. Set it to match your market.</p>
+                                    <p><strong>Simple Fee Model:</strong> Customers pay a flat $0.99 Pull Up Service Fee per order. You keep <strong>100%</strong> of your menu prices and <strong>100%</strong> of the curbside fee. Stripe processing (~1.75% + 30¢) is absorbed as a normal business cost.</p>
+                                    <p><strong>What You Keep:</strong> 100% of your menu prices + 100% of the curbside fee. The only deduction is standard Stripe processing on the total order value.</p>
+                                    {isEarlyAdopter && <p><strong>🎉 Early Adopter Bonus:</strong> As one of our first 100 partner cafes, you receive a $0.25/order Partner Bonus for 12 months — credited back to you from the platform fee.</p>}
+                                    <p className="text-[10px] text-stone-500 italic mt-2">💡 Increase during peak hours, lower for promotions. Email hello@pullupcoffee.com to request a curbside fee above $25.00.</p>
                                 </div>
                                 <div className="mt-3 bg-stone-50 border border-stone-200 rounded-xl p-4 text-xs text-stone-700">
                                     <p className="font-bold text-stone-900 mb-2">Need a higher curbside fee?</p>
-                                    <p className="mb-3">If your business requires a curbside fee above $6.00 (e.g., premium location, extended delivery radius, or high-demand area), you can request a custom fee by emailing our team.</p>
-                                    <a href={`mailto:hello@pullupcoffee.com.au?subject=Custom%20Curbside%20Fee%20Request%20-%20${encodeURIComponent(profile?.businessName || 'My Cafe')}&body=Hi%20Pull%20Up%20Team%2C%0A%0ABusiness%20Name%3A%20${encodeURIComponent(profile?.businessName || '')}%0ARequested%20Fee%3A%20%24%0AReason%3A%20%0A%0AThanks`} className="inline-block bg-stone-900 text-white px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-stone-800 transition">📧 Request Custom Fee</a>
+                                    <p className="mb-3">If your business requires a curbside fee above $25.00 (e.g., premium location, extended delivery radius, or high-demand area), submit a request below.</p>
+                                    {customFeeSent ? (
+                                        <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl p-3">
+                                            <svg className="w-4 h-4 text-green-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                            <p className="text-xs text-green-700 font-bold">Request sent! We&apos;ll review and get back to you within 24 hours.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            <div className="flex gap-2">
+                                                <div className="flex-1">
+                                                    <input type="number" step="0.50" min="25.50" max="100" placeholder="Requested fee ($)" value={customFeeAmount} onChange={e => setCustomFeeAmount(e.target.value)} className="w-full p-2.5 border border-stone-300 rounded-lg text-sm font-semibold text-stone-900 bg-white outline-none focus:border-orange-400 transition" />
+                                                </div>
+                                            </div>
+                                            <textarea placeholder="Briefly explain why (e.g. premium location, extended radius...)" value={customFeeReason} onChange={e => setCustomFeeReason(e.target.value)} rows={2} className="w-full p-2.5 border border-stone-300 rounded-lg text-sm text-stone-900 bg-white outline-none focus:border-orange-400 transition resize-none" />
+                                            <button disabled={customFeeSending || !customFeeAmount || !customFeeReason.trim()} onClick={async () => {
+                                                setCustomFeeSending(true);
+                                                try {
+                                                    const token = await getAuthToken();
+                                                    await fetch('/api/twilio', {
+                                                        method: 'POST',
+                                                        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+                                                        body: JSON.stringify({ template: 'generic', to: '+61409350889', body: `CUSTOM FEE REQUEST from ${profile?.businessName || 'Unknown Cafe'}: Requested $${customFeeAmount}, Reason: ${customFeeReason.trim()}` })
+                                                    });
+                                                    setCustomFeeSent(true);
+                                                } catch { alert('Failed to send. Please try again.'); }
+                                                setCustomFeeSending(false);
+                                            }} className="w-full bg-stone-900 text-white py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-stone-800 transition disabled:opacity-50">
+                                                {customFeeSending ? 'Sending...' : '📩 Submit Fee Request'}
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -2324,7 +2955,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                             
                             <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5 space-y-2">
                                 <p className="text-[10px] font-bold uppercase tracking-widest text-orange-600 mb-2">Platform Fee Structure</p>
-                                <p className="text-sm text-stone-700 leading-relaxed"><strong>Current Rates:</strong> {isEarlyAdopter ? 'As an early adopter, Pull Up currently covers both Stripe fixed and percentage transaction costs for your cafe.' : 'We cover the 30¢ Stripe fixed fee per transaction, plus all platform services, infrastructure, and support. Your cafe covers the Stripe percentage fee (~1.75% + GST) on your revenue portion.'}</p>
+                                <p className="text-sm text-stone-700 leading-relaxed"><strong>Current Model:</strong> {isEarlyAdopter ? 'As an early adopter, you receive a $0.25/order Partner Bonus for 12 months — automatically returned from the $0.99 platform fee. You keep 100% of menu prices + 100% of curbside fee.' : 'Customers pay a flat $0.99 Pull Up Service Fee per order. You keep 100% of your menu prices and 100% of the curbside fee. Standard Stripe processing fees (~1.75% + 30¢) apply to the total transaction as a normal business cost.'}</p>
                                 <p className="text-sm text-stone-700 leading-relaxed"><strong>Our Commitment:</strong> We're constantly negotiating better payment processing rates and exploring competitive alternatives like PayPal to reduce your costs. We want this to be sustainable and profitable for everyone.</p>
                                 <p className="text-xs text-orange-600 font-semibold mt-3">💬 Have feedback on payment fees? Let us know—we're listening and adapting as we grow.</p>
                             </div>
@@ -2392,7 +3023,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                                 <div>
                                     <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500 mb-2">Login Email</p>
                                     <p className="text-sm font-semibold text-stone-900 mb-2">{profile?.email || 'Not set'}</p>
-                                    <p className="text-[9px] text-stone-500 italic">To change your login email, please contact support at hello@pullupcoffee.com.au with your business details.</p>
+                                    <p className="text-[9px] text-stone-500 italic">To change your login email, please contact support at hello@pullupcoffee.com with your business details.</p>
                                 </div>
                                 <div>
                                     <label className="block text-[10px] font-bold uppercase tracking-widest text-stone-500 mb-2">Billing Email (for invoices)</label>
@@ -2456,16 +3087,16 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                         <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-stone-200 space-y-4">
                             <div>
                                 <h3 className="font-bold text-xl text-stone-900 mb-2">Marketing Materials</h3>
-                                <p className="text-sm text-stone-500">Choose a poster design and print for your storefront window or curbside area.</p>
+                                <p className="text-sm text-stone-500">Choose a poster design and print for your storefront window or curbside area. Each includes the Pull Up Coffee logo and your unique QR code.</p>
                             </div>
                             <div className="grid md:grid-cols-3 gap-4">
                                 {/* Design 1: Professional */}
                                 <div className="border-2 border-stone-200 rounded-2xl p-4 text-center hover:border-orange-400 transition cursor-pointer group">
                                     <div className="bg-gradient-to-br from-stone-900 to-stone-800 rounded-xl p-4 mb-3 aspect-[3/4] flex flex-col items-center justify-center text-white">
-                                        <div className="text-3xl mb-2">☕</div>
+                                        <PullUpLogo className="w-10 h-10 mb-2" />
                                         <p className="font-serif italic font-bold text-sm">Now Serving Curbside</p>
                                         <div className="bg-white p-2 rounded-lg mt-2 inline-block">
-                                            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=60x60&data=${encodeURIComponent(`https://pullupcoffee.com.au?cafe=${user?.uid}`)}`} alt="QR" className="w-[60px] h-[60px]" />
+                                            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=60x60&data=${encodeURIComponent(`https://pullupcoffee.com?cafe=${user?.uid}`)}`} alt="QR" className="w-[60px] h-[60px]" />
                                         </div>
                                         <p className="text-[8px] mt-1 text-stone-300">{profile?.businessName || 'Your Cafe'}</p>
                                     </div>
@@ -2474,8 +3105,8 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                                     <button onClick={() => {
                                         const pw = window.open('', '_blank');
                                         if (pw) {
-                                            pw.document.write(`<!DOCTYPE html><html><head><title>Poster - ${profile?.businessName || 'Cafe'}</title><style>@page{size:A4;margin:0}body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#1c1917;font-family:Georgia,serif;color:white;text-align:center}div.c{padding:60px 40px;max-width:600px}.qr{background:white;padding:24px;border-radius:16px;display:inline-block;margin:30px 0}.qr img{width:280px;height:280px}h1{font-size:52px;font-style:italic;margin:20px 0;line-height:1.1}.tag{font-size:20px;color:#a8a29e;margin-bottom:40px}.cafe{font-size:28px;color:#f97316;font-weight:700;margin-top:20px}.steps{font-size:15px;color:#78716c;margin-top:30px;line-height:1.8}.pow{font-size:12px;color:#57534e;margin-top:20px}@media print{body{background:#1c1917;-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="c"><h1>Now Serving<br/>Curbside</h1><div class="tag">Order from your car · Zero wait</div><div class="qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(`https://pullupcoffee.com.au?cafe=${user?.uid}`)}"/></div><div class="cafe">${profile?.businessName || 'Your Cafe'}</div><div class="steps">1. Scan QR · 2. Order & Pay · 3. We bring it out</div><div class="pow">Powered by Pull Up Coffee™</div></div></body></html>`);
-                                            pw.document.close(); setTimeout(() => pw.print(), 500);
+                                            pw.document.write(`<!DOCTYPE html><html><head><title>Poster - ${profile?.businessName || 'Cafe'}</title><style>*{margin:0;padding:0;box-sizing:border-box}@page{size:A4;margin:0}html,body{width:100%;height:100%;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}body{display:flex;align-items:center;justify-content:center;background:#1c1917!important;font-family:Georgia,serif;color:white;text-align:center}.c{padding:60px 40px;max-width:600px}.logo{width:120px;height:120px;background:#f97316;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 30px}.qr{background:white;padding:24px;border-radius:16px;display:inline-block;margin:30px 0}.qr img{width:280px;height:280px}h1{font-size:52px;font-style:italic;margin:20px 0;line-height:1.1}.tag{font-size:20px;color:#a8a29e;margin-bottom:40px}.cafe{font-size:28px;color:#f97316;font-weight:700;margin-top:20px}.steps{font-size:15px;color:#78716c;margin-top:30px;line-height:1.8}.pow{font-size:12px;color:#57534e;margin-top:20px}@media print{html,body{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}body{background:#1c1917!important}.logo{background:#f97316!important}}</style></head><body><div class="c"><div class="logo"><svg viewBox="0 0 100 100" width="80" height="80" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M 24 36 L 74 36 A 2 2 0 0 1 76 38 L 76 46"/><path d="M 22 42 C 22 55 28 66 32 66"/><path d="M 22 42 C 40 42 45 42 55 50 C 62 55 72 55 76 50"/><path d="M 76 46 C 76 60 72 66 68 66"/><path d="M 44 66 L 56 66"/><path d="M 76 44 C 92 44 96 52 86 62 C 80 67 72 62 68 60"/><circle cx="38" cy="66" r="6"/><circle cx="38" cy="66" r="2"/><circle cx="62" cy="66" r="6"/><circle cx="62" cy="66" r="2"/></svg></div><h1>Now Serving<br/>Curbside</h1><div class="tag">Order from your car · Zero wait</div><div class="qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(`https://pullupcoffee.com?cafe=${user?.uid}`)}"/></div><div class="cafe">${profile?.businessName || 'Your Cafe'}</div><div class="steps">1. Scan QR · 2. Order & Pay · 3. We bring it out</div><div class="pow">Powered by Pull Up Coffee™</div></div></body></html>`);
+                                            pw.document.close(); setTimeout(() => pw.print(), 800);
                                         }
                                     }} className="w-full bg-stone-900 text-white py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-stone-800 transition">🖨️ Print</button>
                                 </div>
@@ -2483,11 +3114,11 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                                 {/* Design 2: Sunrise Beach */}
                                 <div className="border-2 border-stone-200 rounded-2xl p-4 text-center hover:border-orange-400 transition cursor-pointer group">
                                     <div className="bg-gradient-to-b from-orange-400 via-amber-300 to-yellow-100 rounded-xl p-4 mb-3 aspect-[3/4] flex flex-col items-center justify-center text-stone-900">
-                                        <div className="text-3xl mb-2">🌅</div>
+                                        <PullUpLogo className="w-10 h-10 mb-2" />
                                         <p className="font-bold text-sm">COFFEE ON THE CURB</p>
                                         <p className="text-[9px] text-stone-700">No parking hassle. No queue.</p>
                                         <div className="bg-white p-2 rounded-lg mt-2 inline-block shadow-md">
-                                            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=60x60&data=${encodeURIComponent(`https://pullupcoffee.com.au?cafe=${user?.uid}`)}`} alt="QR" className="w-[60px] h-[60px]" />
+                                            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=60x60&data=${encodeURIComponent(`https://pullupcoffee.com?cafe=${user?.uid}`)}`} alt="QR" className="w-[60px] h-[60px]" />
                                         </div>
                                         <p className="text-[8px] mt-1 font-bold">{profile?.businessName || 'Your Cafe'}</p>
                                     </div>
@@ -2496,8 +3127,8 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                                     <button onClick={() => {
                                         const pw = window.open('', '_blank');
                                         if (pw) {
-                                            pw.document.write(`<!DOCTYPE html><html><head><title>Poster - ${profile?.businessName || 'Cafe'}</title><style>@page{size:A4;margin:0}body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#fb923c 0%,#fbbf24 40%,#fef3c7 100%);font-family:-apple-system,sans-serif;color:#1c1917;text-align:center}div.c{padding:60px 40px;max-width:600px}h1{font-size:56px;font-weight:900;margin:20px 0;line-height:1}.tag{font-size:22px;color:#44403c;margin-bottom:40px;font-weight:600}.qr{background:white;padding:24px;border-radius:20px;display:inline-block;box-shadow:0 12px 40px rgba(0,0,0,0.15);margin:20px 0}.qr img{width:280px;height:280px}.cafe{font-size:28px;color:#9a3412;font-weight:800;margin-top:20px}.steps{font-size:16px;color:#57534e;margin-top:30px;line-height:1.8;font-weight:600}.pow{font-size:12px;color:#78716c;margin-top:20px}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="c"><div style="font-size:60px;margin-bottom:10px">🌅☕</div><h1>COFFEE<br/>ON THE CURB</h1><div class="tag">No parking hassle · No queue · Just vibes</div><div class="qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(`https://pullupcoffee.com.au?cafe=${user?.uid}`)}"/></div><div class="cafe">${profile?.businessName || 'Your Cafe'}</div><div class="steps">Scan → Order → We bring it out 🚗</div><div class="pow">Powered by Pull Up Coffee™</div></div></body></html>`);
-                                            pw.document.close(); setTimeout(() => pw.print(), 500);
+                                            pw.document.write(`<!DOCTYPE html><html><head><title>Poster - ${profile?.businessName || 'Cafe'}</title><style>*{margin:0;padding:0;box-sizing:border-box}@page{size:A4;margin:0}html,body{width:100%;height:100%;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}body{display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#fb923c 0%,#fbbf24 40%,#fef3c7 100%)!important;font-family:-apple-system,sans-serif;color:#1c1917;text-align:center}.c{padding:60px 40px;max-width:600px}.logo{width:120px;height:120px;background:#f97316;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 30px;box-shadow:0 8px 30px rgba(0,0,0,0.15)}h1{font-size:56px;font-weight:900;margin:20px 0;line-height:1}.tag{font-size:22px;color:#44403c;margin-bottom:40px;font-weight:600}.qr{background:white;padding:24px;border-radius:20px;display:inline-block;box-shadow:0 12px 40px rgba(0,0,0,0.15);margin:20px 0}.qr img{width:280px;height:280px}.cafe{font-size:28px;color:#9a3412;font-weight:800;margin-top:20px}.steps{font-size:16px;color:#57534e;margin-top:30px;line-height:1.8;font-weight:600}.pow{font-size:12px;color:#78716c;margin-top:20px}@media print{html,body{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}body{background:linear-gradient(180deg,#fb923c 0%,#fbbf24 40%,#fef3c7 100%)!important}.logo{background:#f97316!important}}</style></head><body><div class="c"><div class="logo"><svg viewBox="0 0 100 100" width="80" height="80" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M 24 36 L 74 36 A 2 2 0 0 1 76 38 L 76 46"/><path d="M 22 42 C 22 55 28 66 32 66"/><path d="M 22 42 C 40 42 45 42 55 50 C 62 55 72 55 76 50"/><path d="M 76 46 C 76 60 72 66 68 66"/><path d="M 44 66 L 56 66"/><path d="M 76 44 C 92 44 96 52 86 62 C 80 67 72 62 68 60"/><circle cx="38" cy="66" r="6"/><circle cx="38" cy="66" r="2"/><circle cx="62" cy="66" r="6"/><circle cx="62" cy="66" r="2"/></svg></div><h1>COFFEE<br/>ON THE CURB</h1><div class="tag">No parking hassle · No queue · Just vibes</div><div class="qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(`https://pullupcoffee.com?cafe=${user?.uid}`)}"/></div><div class="cafe">${profile?.businessName || 'Your Cafe'}</div><div class="steps">Scan → Order → We bring it out 🚗</div><div class="pow">Powered by Pull Up Coffee™</div></div></body></html>`);
+                                            pw.document.close(); setTimeout(() => pw.print(), 800);
                                         }
                                     }} className="w-full bg-orange-500 text-white py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-orange-400 transition">🖨️ Print</button>
                                 </div>
@@ -2505,11 +3136,11 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                                 {/* Design 3: Neon Night */}
                                 <div className="border-2 border-stone-200 rounded-2xl p-4 text-center hover:border-orange-400 transition cursor-pointer group">
                                     <div className="bg-gradient-to-b from-purple-900 via-violet-800 to-indigo-900 rounded-xl p-4 mb-3 aspect-[3/4] flex flex-col items-center justify-center text-white">
-                                        <div className="text-3xl mb-2">🔥</div>
+                                        <PullUpLogo className="w-10 h-10 mb-2" />
                                         <p className="font-bold text-sm text-fuchsia-300" style={{textShadow:'0 0 10px #d946ef'}}>PULL UP &amp; SIP</p>
                                         <p className="text-[9px] text-purple-300">Curbside coffee, zero wait</p>
                                         <div className="bg-white p-2 rounded-lg mt-2 inline-block">
-                                            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=60x60&data=${encodeURIComponent(`https://pullupcoffee.com.au?cafe=${user?.uid}`)}`} alt="QR" className="w-[60px] h-[60px]" />
+                                            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=60x60&data=${encodeURIComponent(`https://pullupcoffee.com?cafe=${user?.uid}`)}`} alt="QR" className="w-[60px] h-[60px]" />
                                         </div>
                                         <p className="text-[8px] mt-1 text-purple-200">{profile?.businessName || 'Your Cafe'}</p>
                                     </div>
@@ -2518,19 +3149,19 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                                     <button onClick={() => {
                                         const pw = window.open('', '_blank');
                                         if (pw) {
-                                            pw.document.write(`<!DOCTYPE html><html><head><title>Poster - ${profile?.businessName || 'Cafe'}</title><style>@page{size:A4;margin:0}body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#581c87 0%,#5b21b6 50%,#312e81 100%);font-family:-apple-system,sans-serif;color:white;text-align:center}div.c{padding:60px 40px;max-width:600px}h1{font-size:56px;font-weight:900;margin:20px 0;line-height:1;color:#e879f9;text-shadow:0 0 30px #d946ef,0 0 60px #a855f7}.tag{font-size:20px;color:#c4b5fd;margin-bottom:40px;font-weight:600}.qr{background:white;padding:24px;border-radius:20px;display:inline-block;box-shadow:0 0 40px rgba(168,85,247,0.4);margin:20px 0}.qr img{width:280px;height:280px}.cafe{font-size:28px;color:#fbbf24;font-weight:800;margin-top:20px;text-shadow:0 0 15px rgba(251,191,36,0.5)}.steps{font-size:16px;color:#a78bfa;margin-top:30px;line-height:1.8;font-weight:600}.pow{font-size:12px;color:#7c3aed;margin-top:20px}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="c"><div style="font-size:60px;margin-bottom:10px">🔥☕</div><h1>PULL UP<br/>& SIP</h1><div class="tag">Curbside coffee · Zero wait · Maximum vibes</div><div class="qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(`https://pullupcoffee.com.au?cafe=${user?.uid}`)}"/></div><div class="cafe">${profile?.businessName || 'Your Cafe'}</div><div class="steps">Scan → Order → We bring it out 🚗</div><div class="pow">Powered by Pull Up Coffee™</div></div></body></html>`);
-                                            pw.document.close(); setTimeout(() => pw.print(), 500);
+                                            pw.document.write(`<!DOCTYPE html><html><head><title>Poster - ${profile?.businessName || 'Cafe'}</title><style>*{margin:0;padding:0;box-sizing:border-box}@page{size:A4;margin:0}html,body{width:100%;height:100%;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}body{display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#581c87 0%,#5b21b6 50%,#312e81 100%)!important;font-family:-apple-system,sans-serif;color:white;text-align:center}.c{padding:60px 40px;max-width:600px}.logo{width:120px;height:120px;background:#f97316;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 30px;box-shadow:0 0 40px rgba(249,115,22,0.5)}h1{font-size:56px;font-weight:900;margin:20px 0;line-height:1;color:#e879f9;text-shadow:0 0 30px #d946ef,0 0 60px #a855f7}.tag{font-size:20px;color:#c4b5fd;margin-bottom:40px;font-weight:600}.qr{background:white;padding:24px;border-radius:20px;display:inline-block;box-shadow:0 0 40px rgba(168,85,247,0.4);margin:20px 0}.qr img{width:280px;height:280px}.cafe{font-size:28px;color:#fbbf24;font-weight:800;margin-top:20px;text-shadow:0 0 15px rgba(251,191,36,0.5)}.steps{font-size:16px;color:#a78bfa;margin-top:30px;line-height:1.8;font-weight:600}.pow{font-size:12px;color:#7c3aed;margin-top:20px}@media print{html,body{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}body{background:linear-gradient(180deg,#581c87 0%,#5b21b6 50%,#312e81 100%)!important}.logo{background:#f97316!important}}</style></head><body><div class="c"><div class="logo"><svg viewBox="0 0 100 100" width="80" height="80" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M 24 36 L 74 36 A 2 2 0 0 1 76 38 L 76 46"/><path d="M 22 42 C 22 55 28 66 32 66"/><path d="M 22 42 C 40 42 45 42 55 50 C 62 55 72 55 76 50"/><path d="M 76 46 C 76 60 72 66 68 66"/><path d="M 44 66 L 56 66"/><path d="M 76 44 C 92 44 96 52 86 62 C 80 67 72 62 68 60"/><circle cx="38" cy="66" r="6"/><circle cx="38" cy="66" r="2"/><circle cx="62" cy="66" r="6"/><circle cx="62" cy="66" r="2"/></svg></div><h1>PULL UP<br/>& SIP</h1><div class="tag">Curbside coffee · Zero wait · Maximum vibes</div><div class="qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(`https://pullupcoffee.com?cafe=${user?.uid}`)}"/></div><div class="cafe">${profile?.businessName || 'Your Cafe'}</div><div class="steps">Scan → Order → We bring it out 🚗</div><div class="pow">Powered by Pull Up Coffee™</div></div></body></html>`);
+                                            pw.document.close(); setTimeout(() => pw.print(), 800);
                                         }
                                     }} className="w-full bg-purple-700 text-white py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-purple-600 transition">🖨️ Print</button>
                                 </div>
                             </div>
-                            <p className="text-[9px] text-stone-500 italic text-center">Display near your entrance or window facing the street. Customers scan to order instantly from their car.</p>
+                            <p className="text-[9px] text-stone-500 italic text-center">Tip: In your browser&apos;s print dialog, make sure &quot;Background graphics&quot; is checked to preserve colors and gradients.</p>
                         </div>
                     </div>
                 )}
 
                 {tab === 'support' && (
-                    <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-stone-200 flex flex-col min-h-[500px] max-h-[75vh] relative overflow-hidden">
+                    <div className="bg-white p-4 sm:p-8 rounded-[2rem] shadow-sm border border-stone-200 flex flex-col min-h-[500px] max-h-[75vh] relative overflow-hidden">
                         <div className="flex items-center gap-4 mb-4 border-b border-stone-100 pb-4">
                             <div className="bg-stone-100 p-3 rounded-full text-stone-900"><Icons.Robot /></div>
                             <div><h3 className="font-serif font-bold text-xl text-stone-900">Support Engine</h3><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mt-1">Platform Knowledge Base</p></div>
@@ -2554,6 +3185,79 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                                 </div>
                             )}
                         </div>
+                        {/* ─── WHY PULL UP? COMPARISON ─── */}
+                        <div className="mb-3">
+                            <button onClick={() => setShowWhyPullUp(prev => !prev)} className="w-full flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-xl hover:border-emerald-300 transition">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700">📊 Why Pull Up? Platform Comparison</p>
+                                <span className={`text-emerald-400 transition-transform ${showWhyPullUp ? 'rotate-90' : ''}`}><Icons.ChevronRight /></span>
+                            </button>
+                            {showWhyPullUp && (
+                                <div className="mt-2 p-4 bg-white border border-emerald-200 rounded-xl animate-fade-in space-y-4">
+                                    <h4 className="text-sm font-bold text-stone-900">How Pull Up Coffee Compares to Other Platforms</h4>
+                                    <p className="text-xs text-stone-500">See how much more you keep with Pull Up vs third-party delivery apps.</p>
+
+                                    {/* Fee comparison bars */}
+                                    <div className="space-y-3">
+                                        {[
+                                            { name: 'Pull Up Coffee', fee: '$0.99 flat', pct: 0, color: 'bg-emerald-500', barW: '2%', note: '100% of menu + curbside fee is yours' },
+                                            { name: 'me&u / Mr Yum', fee: '~5% commission', pct: 5, color: 'bg-yellow-500', barW: '17%', note: 'Per-order commission from menu revenue' },
+                                            { name: 'Bopple', fee: '~6-8%', pct: 7, color: 'bg-amber-500', barW: '23%', note: 'Commission + monthly subscription' },
+                                            { name: 'DoorDash Pickup', fee: '15-25%', pct: 20, color: 'bg-orange-500', barW: '67%', note: 'Commission on order total' },
+                                            { name: 'UberEats', fee: '30%+', pct: 30, color: 'bg-red-500', barW: '100%', note: 'Highest commission + service fees' },
+                                        ].map((p) => (
+                                            <div key={p.name}>
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <span className="text-[11px] font-bold text-stone-700">{p.name}</span>
+                                                    <span className="text-[10px] font-mono font-bold text-stone-500">{p.fee}</span>
+                                                </div>
+                                                <div className="w-full bg-stone-100 rounded-full h-3 overflow-hidden">
+                                                    <div className={`${p.color} h-full rounded-full transition-all duration-500`} style={{ width: p.pct === 0 ? '3%' : p.barW }} />
+                                                </div>
+                                                <p className="text-[9px] text-stone-400 mt-0.5">{p.note}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <div className="mt-4 p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700 mb-2">Your Pull Up Advantage</p>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="text-center p-2 bg-white rounded-lg border border-emerald-200">
+                                                <p className="text-lg font-bold text-emerald-700">$0</p>
+                                                <p className="text-[9px] text-stone-500 font-bold uppercase">Commission</p>
+                                            </div>
+                                            <div className="text-center p-2 bg-white rounded-lg border border-emerald-200">
+                                                <p className="text-lg font-bold text-emerald-700">100%</p>
+                                                <p className="text-[9px] text-stone-500 font-bold uppercase">Menu Revenue Kept</p>
+                                            </div>
+                                            <div className="text-center p-2 bg-white rounded-lg border border-emerald-200">
+                                                <p className="text-lg font-bold text-emerald-700">100%</p>
+                                                <p className="text-[9px] text-stone-500 font-bold uppercase">Curbside Fee Kept</p>
+                                            </div>
+                                            <div className="text-center p-2 bg-white rounded-lg border border-emerald-200">
+                                                <p className="text-lg font-bold text-emerald-700">$0</p>
+                                                <p className="text-[9px] text-stone-500 font-bold uppercase">Monthly Subscription</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-3 p-3 bg-stone-50 border border-stone-200 rounded-xl">
+                                        <p className="text-[10px] font-bold text-stone-600 mb-2">Example: $30 Order Comparison</p>
+                                        <div className="space-y-1.5 text-[11px]">
+                                            <div className="flex justify-between"><span className="text-stone-600">UberEats (30%):</span><span className="text-red-600 font-bold">You lose $9.00</span></div>
+                                            <div className="flex justify-between"><span className="text-stone-600">DoorDash (20%):</span><span className="text-orange-600 font-bold">You lose $6.00</span></div>
+                                            <div className="flex justify-between"><span className="text-stone-600">me&u (5%):</span><span className="text-yellow-600 font-bold">You lose $1.50</span></div>
+                                            <div className="flex justify-between"><span className="text-stone-600">Pull Up Coffee:</span><span className="text-emerald-600 font-bold">You lose $0.00 ✓</span></div>
+                                        </div>
+                                        <p className="text-[9px] text-stone-400 mt-2">The customer pays a flat $0.99 service fee directly to Pull Up. Your menu revenue and curbside fee remain untouched.</p>
+                                    </div>
+
+                                    <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                                        <p className="text-[10px] font-bold text-amber-700 mb-1">💡 Pricing Transparency</p>
+                                        <p className="text-[10px] text-stone-600">We encourage all partner cafes to keep their Pull Up menu prices the same as in-store. Customers trust transparency, and consistent pricing builds loyalty and repeat orders.</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                         <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2 text-sm">
                             {botChat.map((m, i) => (
                                 <div key={i} className={`flex ${m.type === 'bot' ? 'justify-start' : 'justify-end'}`}>
@@ -2571,52 +3275,216 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
 
                 {tab === 'platform' && isPlatformAdmin && (
                     <div className="space-y-6">
-                        <div className="bg-white p-8 rounded-[2rem] border border-stone-200 shadow-sm">
-                            <div className="flex items-center justify-between mb-6">
-                                <div>
-                                    <h3 className="font-bold text-xl text-stone-900">Master Platform Overview</h3>
-                                    <p className="text-xs text-stone-500 mt-1">Live operational snapshot across all cafes and orders.</p>
+                        {/* ─── PULSE HEADER ─── */}
+                        <div className="bg-gradient-to-r from-stone-900 via-stone-800 to-stone-900 p-6 rounded-[2rem] text-white relative overflow-hidden">
+                            <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'radial-gradient(circle at 20% 50%, #f97316 0%, transparent 50%), radial-gradient(circle at 80% 50%, #22c55e 0%, transparent 50%)'}} />
+                            <div className="relative flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className="relative">
+                                        <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse" />
+                                        <div className="absolute inset-0 w-3 h-3 bg-green-400 rounded-full animate-ping" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-2xl font-bold tracking-tight">Pull Up Command Centre</h2>
+                                        <p className="text-xs text-stone-400 mt-0.5">All systems operational &middot; Real-time monitoring active</p>
+                                    </div>
                                 </div>
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Updated {platformUpdatedAt ? new Date(platformUpdatedAt).toLocaleTimeString() : '--'}</p>
-                            </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                <div className="bg-stone-50 border border-stone-200 rounded-xl p-4"><p className="text-[10px] uppercase tracking-widest text-stone-500 font-bold">Cafes Online</p><p className="text-2xl font-bold text-green-600 mt-1">{platformStats.onlineCafes}</p></div>
-                                <div className="bg-stone-50 border border-stone-200 rounded-xl p-4"><p className="text-[10px] uppercase tracking-widest text-stone-500 font-bold">Cafes Offline</p><p className="text-2xl font-bold text-stone-900 mt-1">{platformStats.offlineCafes}</p></div>
-                                <div className="bg-stone-50 border border-stone-200 rounded-xl p-4"><p className="text-[10px] uppercase tracking-widest text-stone-500 font-bold">Active Orders</p><p className="text-2xl font-bold text-orange-600 mt-1">{platformStats.activeOrders}</p></div>
-                                <div className="bg-stone-50 border border-stone-200 rounded-xl p-4"><p className="text-[10px] uppercase tracking-widest text-stone-500 font-bold">Active Users</p><p className="text-2xl font-bold text-stone-900 mt-1">{platformStats.activeCustomers}</p></div>
-                                <div className="bg-stone-50 border border-stone-200 rounded-xl p-4"><p className="text-[10px] uppercase tracking-widest text-stone-500 font-bold">Orders Today</p><p className="text-2xl font-bold text-stone-900 mt-1">{platformStats.ordersToday}</p></div>
-                                <div className="bg-stone-50 border border-stone-200 rounded-xl p-4"><p className="text-[10px] uppercase tracking-widest text-stone-500 font-bold">Completed</p><p className="text-2xl font-bold text-green-600 mt-1">{platformStats.completedToday}</p></div>
-                                <div className="bg-stone-50 border border-stone-200 rounded-xl p-4"><p className="text-[10px] uppercase tracking-widest text-stone-500 font-bold">Gross Today</p><p className="text-2xl font-bold text-stone-900 mt-1">${platformStats.grossToday.toFixed(2)}</p></div>
-                                <div className="bg-stone-50 border border-stone-200 rounded-xl p-4"><p className="text-[10px] uppercase tracking-widest text-stone-500 font-bold">Curbside Fee Flow</p><p className="text-2xl font-bold text-stone-900 mt-1">${platformStats.feeFlowToday.toFixed(2)}</p></div>
+                                <div className="text-right">
+                                    <p className="text-2xl font-mono font-bold tabular-nums">{new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</p>
+                                    <p className="text-[9px] text-stone-500 uppercase tracking-widest mt-0.5">Last sync {platformUpdatedAt ? new Date(platformUpdatedAt).toLocaleTimeString() : '--'}</p>
+                                </div>
                             </div>
                         </div>
 
-                        <div className="bg-white p-8 rounded-[2rem] border border-stone-200 shadow-sm">
-                            <h4 className="font-bold text-stone-900 mb-4">Cafe Network Status</h4>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left text-sm">
-                                    <thead>
-                                        <tr className="text-[10px] uppercase tracking-widest text-stone-500 border-b border-stone-200">
-                                            <th className="pb-3 pr-4">Cafe</th>
-                                            <th className="pb-3 pr-4">Status</th>
-                                            <th className="pb-3 pr-4">Active Orders</th>
-                                            <th className="pb-3 pr-4">Payout</th>
-                                            <th className="pb-3">Stripe</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {platformCafeRows.map((row) => (
-                                            <tr key={row.id} className="border-b border-stone-100">
-                                                <td className="py-3 pr-4 font-semibold text-stone-900">{row.businessName}</td>
-                                                <td className="py-3 pr-4"><span className={`text-[10px] font-bold uppercase tracking-widest ${row.status === 'open' ? 'text-green-600' : 'text-stone-400'}`}>{row.status === 'open' ? 'ONLINE' : 'OFFLINE'}</span></td>
-                                                <td className="py-3 pr-4 text-stone-700">{row.activeOrders}</td>
-                                                <td className="py-3 pr-4 text-stone-700 uppercase text-[10px] font-bold tracking-widest">{row.payoutPreference}</td>
-                                                <td className="py-3 text-[10px] font-bold uppercase tracking-widest"><span className={row.stripeConnected ? 'text-green-600' : 'text-amber-600'}>{row.stripeConnected ? 'CONNECTED' : 'PENDING'}</span></td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                        {/* ─── HERO METRICS ─── */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-5 relative overflow-hidden">
+                                <div className="absolute -right-4 -top-4 w-20 h-20 bg-green-200/30 rounded-full" />
+                                <p className="text-[9px] font-bold uppercase tracking-widest text-green-600 mb-1">Revenue Today</p>
+                                <p className="text-3xl font-bold text-green-700 tabular-nums">${platformStats.grossToday.toFixed(0)}</p>
+                                <p className="text-[10px] text-green-500 mt-1">{platformStats.completedToday} completed</p>
                             </div>
+                            <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-200 rounded-2xl p-5 relative overflow-hidden">
+                                <div className="absolute -right-4 -top-4 w-20 h-20 bg-orange-200/30 rounded-full" />
+                                <p className="text-[9px] font-bold uppercase tracking-widest text-orange-600 mb-1">Active Orders</p>
+                                <p className="text-3xl font-bold text-orange-700 tabular-nums">{platformStats.activeOrders}</p>
+                                <p className="text-[10px] text-orange-500 mt-1">{platformStats.ordersToday} total today</p>
+                            </div>
+                            <div className="bg-gradient-to-br from-blue-50 to-sky-50 border border-blue-200 rounded-2xl p-5 relative overflow-hidden">
+                                <div className="absolute -right-4 -top-4 w-20 h-20 bg-blue-200/30 rounded-full" />
+                                <p className="text-[9px] font-bold uppercase tracking-widest text-blue-600 mb-1">Cafes Online</p>
+                                <p className="text-3xl font-bold text-blue-700 tabular-nums">{platformStats.onlineCafes}<span className="text-lg text-blue-400">/{platformStats.totalCafes}</span></p>
+                                <p className="text-[10px] text-blue-500 mt-1">{platformStats.pendingApprovals} pending approval</p>
+                            </div>
+                            <div className="bg-gradient-to-br from-purple-50 to-violet-50 border border-purple-200 rounded-2xl p-5 relative overflow-hidden">
+                                <div className="absolute -right-4 -top-4 w-20 h-20 bg-purple-200/30 rounded-full" />
+                                <p className="text-[9px] font-bold uppercase tracking-widest text-purple-600 mb-1">Platform Fee</p>
+                                <p className="text-3xl font-bold text-purple-700 tabular-nums">${platformStats.feeFlowToday.toFixed(0)}</p>
+                                <p className="text-[10px] text-purple-500 mt-1">{platformStats.activeCustomers} active users</p>
+                            </div>
+                        </div>
+
+                        {/* ─── COMPLETION RATE + REJECTION ─── */}
+                        <div className="grid md:grid-cols-2 gap-4">
+                            <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
+                                <div className="flex justify-between items-center mb-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500">Order Completion Rate</p>
+                                    <p className="text-sm font-bold text-stone-900">{platformStats.ordersToday > 0 ? Math.round((platformStats.completedToday / platformStats.ordersToday) * 100) : 0}%</p>
+                                </div>
+                                <div className="w-full bg-stone-100 rounded-full h-3 overflow-hidden">
+                                    <div className="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full transition-all duration-1000" style={{width: `${platformStats.ordersToday > 0 ? (platformStats.completedToday / platformStats.ordersToday) * 100 : 0}%`}} />
+                                </div>
+                                <div className="flex justify-between text-[9px] text-stone-400 mt-2">
+                                    <span>{platformStats.completedToday} completed</span>
+                                    <span>{platformStats.rejectedToday} rejected</span>
+                                    <span>{platformStats.activeOrders} in progress</span>
+                                </div>
+                            </div>
+                            <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500 mb-3">Revenue Split</p>
+                                <div className="space-y-2">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs text-stone-600">Gross Orders</span>
+                                        <span className="text-sm font-bold text-stone-900">${platformStats.grossToday.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs text-orange-600">Curbside Fees (100% to Cafe)</span>
+                                        <span className="text-sm font-bold text-orange-600">${platformStats.feeFlowToday.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center border-t border-stone-100 pt-2">
+                                        <span className="text-xs text-green-600">Platform Revenue ($0.99/order)</span>
+                                        <span className="text-sm font-bold text-green-600">${(platformStats.completedToday * PLATFORM_SERVICE_FEE).toFixed(2)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* ─── LIVE ORDER FEED ─── */}
+                        <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
+                            <div className="flex items-center gap-2 mb-4">
+                                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500">Live Order Feed</p>
+                            </div>
+                            {platformRecentOrders.length === 0 ? (
+                                <p className="text-sm text-stone-400 italic text-center py-8">No orders yet today — waiting for the first pull up...</p>
+                            ) : (
+                                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                                    {platformRecentOrders.map((o: any) => (
+                                        <div key={o.id} className="flex items-center gap-3 p-3 rounded-xl bg-stone-50 border border-stone-100 hover:bg-stone-100 transition">
+                                            <div className={`w-2 h-2 rounded-full shrink-0 ${o.status === 'pending' ? 'bg-amber-400 animate-pulse' : o.status === 'preparing' ? 'bg-blue-400' : o.status === 'ready' ? 'bg-green-400' : o.status === 'completed' ? 'bg-green-600' : 'bg-red-400'}`} />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm font-bold text-stone-900 truncate">{o.customerName}</span>
+                                                    <span className={`text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${o.status === 'pending' ? 'bg-amber-100 text-amber-700' : o.status === 'preparing' ? 'bg-blue-100 text-blue-700' : o.status === 'ready' ? 'bg-green-100 text-green-700' : o.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'}`}>{o.status}</span>
+                                                    {o.pickupTime && o.pickupTime !== 'ASAP' && <span className="text-[8px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">🕐 {o.pickupTime}</span>}
+                                                </div>
+                                                <p className="text-[10px] text-stone-500 mt-0.5">{o.cafeName} &middot; {o.items?.length || 0} item{(o.items?.length || 0) !== 1 ? 's' : ''} &middot; ${Number(o.total || 0).toFixed(2)}</p>
+                                            </div>
+                                            <span className="text-[9px] text-stone-400 font-mono shrink-0">{o.timestamp ? new Date(o.timestamp).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : '--'}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* ─── CAFE NETWORK ─── */}
+                        <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-2">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500">Cafe Network</p>
+                                    <span className="text-[9px] font-bold bg-stone-100 px-2 py-0.5 rounded-full text-stone-600">{platformCafeRows.length}</span>
+                                </div>
+                            </div>
+                            <div className="grid md:grid-cols-2 gap-3">
+                                {platformCafeRows.map((row) => (
+                                    <div key={row.id} className={`p-4 rounded-xl border transition ${row.status === 'open' ? 'border-green-200 bg-green-50/50' : 'border-stone-200 bg-stone-50/50'}`}>
+                                        <div className="flex items-start justify-between mb-2">
+                                            <div className="flex items-center gap-2">
+                                                <div className={`w-2.5 h-2.5 rounded-full ${row.status === 'open' ? 'bg-green-500' : 'bg-stone-300'}`} />
+                                                <span className="font-bold text-sm text-stone-900">{row.businessName}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                {row.stripeConnected ? <span className="text-[8px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">STRIPE ✓</span> : <span className="text-[8px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">NO STRIPE</span>}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3 text-[9px] text-stone-500">
+                                            <span>{row.activeOrders} active order{row.activeOrders !== 1 ? 's' : ''}</span>
+                                            <span>&middot;</span>
+                                            <span className="uppercase">{row.payoutPreference} payout</span>
+                                            <span>&middot;</span>
+                                            {row.isApproved ? <span className="text-green-600 font-bold">APPROVED</span> : (
+                                                <button onClick={async () => { if (!confirm(`Approve ${row.businessName}?`)) return; try { const token = await getAuthToken(); const res = await fetch('/api/admin/cafes/approve', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }, body: JSON.stringify({ cafeId: row.id }) }); const data = await res.json(); if (res.ok && data.ok) alert(`${row.businessName} approved!`); else alert('Failed: ' + (data.error || 'Unknown')); } catch { alert('Network error.'); } }} className="font-bold text-orange-600 hover:text-orange-500 underline">APPROVE NOW</button>
+                                            )}
+                                        </div>
+                                        {row.isApproved && (
+                                            <button onClick={async () => { if (!confirm(`Resend approval notifications to ${row.businessName}?`)) return; try { const token = await getAuthToken(); const res = await fetch('/api/admin/cafes/approve', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }, body: JSON.stringify({ cafeId: row.id }) }); const data = await res.json(); if (res.ok && data.ok) alert(`Notifications resent!`); else alert('Failed: ' + (data.error || 'Unknown')); } catch { alert('Network error.'); } }} className="mt-2 text-[8px] font-bold uppercase tracking-widest text-orange-500 hover:text-orange-400 underline">Resend Notifications</button>
+                                        )}
+                                    </div>
+                                ))}
+                                {platformCafeRows.length === 0 && <p className="text-sm text-stone-400 italic col-span-2 text-center py-8">No cafes registered yet</p>}
+                            </div>
+                        </div>
+
+                        {/* ─── AFFILIATE TRACKER ─── */}
+                        <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-2">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500">Affiliate Network</p>
+                                    <span className="text-[9px] font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">{platformAffiliates.length}</span>
+                                </div>
+                            </div>
+                            {platformAffiliates.length === 0 ? (
+                                <p className="text-sm text-stone-400 italic text-center py-8">No affiliates registered yet</p>
+                            ) : (
+                                <div className="space-y-3">
+                                    {platformAffiliates.map((aff: any) => {
+                                        const createdAt = aff.createdAt ? new Date(aff.createdAt) : null;
+                                        const firstTx = aff.firstTransactionAt ? new Date(aff.firstTransactionAt) : null;
+                                        const commissionStart = firstTx || createdAt;
+                                        const daysElapsed = commissionStart ? Math.floor((Date.now() - commissionStart.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+                                        const daysLeft = Math.max(30 - daysElapsed, 0);
+                                        const isActive = daysLeft > 0;
+                                        const referredCafes = platformCafeRows.filter((c: any) => {
+                                            // Match cafes that have this affiliate's referral code
+                                            return false; // We'd need referredBy on cafe — just show count from affiliate doc
+                                        }).length;
+                                        return (
+                                            <div key={aff.id} className={`p-4 rounded-xl border ${isActive ? 'border-purple-200 bg-purple-50/30' : 'border-stone-200 bg-stone-50/30'}`}>
+                                                <div className="flex items-start justify-between mb-2">
+                                                    <div>
+                                                        <span className="font-bold text-sm text-stone-900">{aff.name || aff.email || 'Unknown'}</span>
+                                                        <p className="text-[10px] text-stone-500 mt-0.5">{aff.email}</p>
+                                                    </div>
+                                                    <span className="text-xs font-mono font-bold text-purple-700 bg-purple-100 px-3 py-1 rounded-full">{aff.referralCode || '—'}</span>
+                                                </div>
+                                                <div className="flex items-center gap-4 text-[9px] text-stone-500 mb-3">
+                                                    <span>{aff.referralCount || 0} referral{(aff.referralCount || 0) !== 1 ? 's' : ''}</span>
+                                                    <span>&middot;</span>
+                                                    <span>${Number(aff.totalEarned || 0).toFixed(2)} earned</span>
+                                                    <span>&middot;</span>
+                                                    <span className={isActive ? 'text-green-600 font-bold' : 'text-stone-400'}>{isActive ? 'ACTIVE' : 'EXPIRED'}</span>
+                                                </div>
+                                                {isActive && (
+                                                    <div>
+                                                        <div className="flex justify-between text-[9px] mb-1">
+                                                            <span className="text-purple-600 font-bold">Commission window</span>
+                                                            <span className="text-purple-600 font-bold">{daysLeft} day{daysLeft !== 1 ? 's' : ''} left</span>
+                                                        </div>
+                                                        <div className="w-full bg-purple-100 rounded-full h-2 overflow-hidden">
+                                                            <div className="h-full bg-gradient-to-r from-purple-400 to-purple-600 rounded-full transition-all duration-500" style={{width: `${((30 - daysLeft) / 30) * 100}%`}} />
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* ─── SYSTEM FOOTER ─── */}
+                        <div className="text-center py-4">
+                            <p className="text-[9px] text-stone-400 uppercase tracking-widest">Pull Up Coffee™ Air Traffic Control &middot; ABN 17 587 686 972 &middot; Firebase Spark &middot; Stripe Live &middot; Vercel Hobby</p>
                         </div>
                     </div>
                 )}
@@ -2757,7 +3625,8 @@ const Discovery = ({ setView, onSelectCafe, cafes }: any) => {
 
             const matchesRadius =
                 locationStatus !== 'granted'
-                || (distanceKm !== null && distanceKm <= searchRadius);
+                || distanceKm === null
+                || distanceKm <= searchRadius;
 
             return { ...c, distanceKm, matchesCafeText, matchesArea, matchesRadius };
         })
@@ -2830,24 +3699,29 @@ const Discovery = ({ setView, onSelectCafe, cafes }: any) => {
                     </div>
                     
                     <div className="space-y-4 w-full">
-                        {filteredCafes.length === 0 ? <div className="text-center py-20 text-stone-400 italic">No partners found with current filters.</div> : 
+                        {filteredCafes.length === 0 ? <div className="text-center py-20 text-stone-400 italic">No partners found with current filters. Try increasing the radius or searching by name.</div> : 
                         filteredCafes.map((c: any) => {
                             const isOpen = c.status === 'open';
                             return (
-                                <button key={c.id} onClick={() => onSelectCafe(c)} className={`w-full p-6 bg-white rounded-[2.5rem] border text-left transition-all shadow-sm flex items-center gap-5 relative overflow-hidden group ${isOpen ? 'border-orange-500 hover:shadow-md cursor-pointer' : 'border-stone-200 hover:border-stone-300 cursor-pointer'}`}>
-                                    <div onClick={(event) => handleFavoriteCafe(event, c)} className="absolute top-6 right-6 text-stone-300 hover:text-red-500 transition z-10" title="Save Favourite & SMS"><Icons.Heart /></div>
-                                    <div className="w-20 h-20 rounded-full bg-stone-100 border border-stone-200 overflow-hidden shrink-0 flex items-center justify-center text-stone-400">
+                                <button key={c.id} onClick={() => onSelectCafe(c)} className={`w-full p-5 bg-white rounded-2xl border text-left transition-all shadow-sm flex items-center gap-4 relative overflow-hidden group ${isOpen ? 'border-green-400 hover:shadow-md hover:border-green-500 cursor-pointer' : 'border-stone-200 hover:border-stone-300 cursor-pointer opacity-80'}`}>
+                                    <div onClick={(event) => handleFavoriteCafe(event, c)} className="absolute top-4 right-4 text-stone-300 hover:text-red-500 transition z-10" title="Save Favourite & SMS"><Icons.Heart /></div>
+                                    <div className="w-16 h-16 rounded-2xl bg-stone-100 border border-stone-200 overflow-hidden shrink-0 flex items-center justify-center text-stone-400">
                                     {c.logo ? <img src={c.logo} className="w-full h-full object-cover" /> : <Icons.Coffee />}
                                     </div>
-                                    <div className="flex-1 pr-8">
-                                        <h3 className="font-bold text-xl text-stone-900 tracking-tight leading-none mb-1">{c.businessName}</h3>
-                                        <p className="text-stone-500 text-[10px] uppercase tracking-widest font-medium truncate">{c.address}</p>
-                                        {typeof c.distanceKm === 'number' && <p className="text-[10px] text-stone-500 mt-2 font-bold uppercase tracking-widest">{c.distanceKm.toFixed(1)} km away</p>}
-                                        {isOpen ? 
-                                            <div className="mt-3 text-[10px] font-bold tracking-widest text-orange-500 uppercase flex items-center gap-2">● Accepting Orders</div>
-                                        : 
-                                            <div className="mt-3 text-[10px] font-bold tracking-widest text-stone-400 uppercase flex items-center gap-2">Closed</div>
-                                        }
+                                    <div className="flex-1 pr-8 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <h3 className="font-bold text-lg text-stone-900 tracking-tight leading-none truncate">{c.businessName}</h3>
+                                            {isOpen ? 
+                                                <span className="shrink-0 inline-flex items-center gap-1 text-[9px] font-bold tracking-widest text-green-600 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full uppercase">● Open</span>
+                                            : 
+                                                <span className="shrink-0 inline-flex items-center gap-1 text-[9px] font-bold tracking-widest text-stone-400 bg-stone-50 border border-stone-200 px-2 py-0.5 rounded-full uppercase">Closed</span>
+                                            }
+                                        </div>
+                                        <p className="text-stone-500 text-xs font-medium truncate mb-1">{c.address}</p>
+                                        <div className="flex items-center gap-3">
+                                            {typeof c.distanceKm === 'number' && <span className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">{c.distanceKm < 1 ? `${Math.round(c.distanceKm * 1000)}m` : `${c.distanceKm.toFixed(1)}km`}</span>}
+                                            {isOpen && <span className="text-[10px] text-stone-400 font-medium">Ready for orders</span>}
+                                        </div>
                                     </div>
                                 </button>
                             )
@@ -2959,12 +3833,26 @@ const Checkout = ({ setView, userProfile, setUserProfile, handlePlaceOrder, cart
     const [carPhoto, setCarPhoto] = useState<string | null>(null);
     const [gpsEnabled, setGpsEnabled] = useState(false);
     const [pendingFavoriteCafeId, setPendingFavoriteCafeId] = useState<string | null>(null);
+    const [pickupType, setPickupType] = useState<'asap' | 'scheduled'>('asap');
+    const [scheduledTime, setScheduledTime] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Generate time slots in 15-min increments from now + 15min to +3hrs
+    const timeSlots = useMemo(() => {
+        const slots: string[] = [];
+        const now = new Date();
+        const start = new Date(now.getTime() + 15 * 60000);
+        start.setMinutes(Math.ceil(start.getMinutes() / 15) * 15, 0, 0);
+        for (let i = 0; i < 12; i++) {
+            const t = new Date(start.getTime() + i * 15 * 60000);
+            slots.push(t.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true }));
+        }
+        return slots;
+    }, []);
 
     const fee = normalizeCurbsideFee(selectedCafe?.curbsideFee);
     const subtotal = cart.reduce((s:any,i:any)=>s+i.price,0);
-    const stripeFee = Math.ceil(((subtotal + fee) * 100 + 30) / (1 - 0.0175)) / 100 - (subtotal + fee);
-    const total = (subtotal + fee + stripeFee).toFixed(2);
+    const total = (subtotal + fee + PLATFORM_SERVICE_FEE).toFixed(2);
     const cartBelowMin = subtotal < MIN_CART_TOTAL;
 
     useEffect(() => {
@@ -2988,7 +3876,7 @@ const Checkout = ({ setView, userProfile, setUserProfile, handlePlaceOrder, cart
         <div className="min-h-screen bg-stone-50 p-6 animate-fade-in flex flex-col items-center pb-32 text-left font-sans">
             <div className="w-full max-w-md text-left">
                 <button onClick={() => setView('cafe-menu')} className="mb-8 p-3 bg-white shadow-sm border border-stone-200 hover:bg-stone-100 rounded-full transition"><Icons.X /></button>
-                <h2 className="text-5xl font-serif font-bold italic mb-8 tracking-tighter text-stone-900 leading-none">Vehicle Specs.</h2>
+                <h2 className="text-3xl sm:text-5xl font-serif font-bold italic mb-8 tracking-tighter text-stone-900 leading-none">Vehicle Specs.</h2>
                 
                 <div className="space-y-4 mb-8">
                     <input type="text" placeholder="Your Name" value={userProfile.name} onChange={(e) => setUserProfile({...userProfile, name:e.target.value})} className="w-full p-5 bg-white rounded-[1.5rem] outline-none font-medium focus:border-stone-400 border border-stone-200 transition text-stone-900 shadow-sm" />
@@ -3017,6 +3905,29 @@ const Checkout = ({ setView, userProfile, setUserProfile, handlePlaceOrder, cart
                         <input type="checkbox" className="w-5 h-5 accent-stone-900" checked={saveProfile} onChange={(e) => { setSaveProfile(e.target.checked); if(!e.target.checked) localStorage.removeItem('pullup_profile'); }} />
                         <span className="text-sm font-bold text-stone-700">Save details for next time</span>
                     </label>
+
+                    <div className="bg-white p-6 rounded-[2rem] border border-stone-200 shadow-sm mt-6">
+                        <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-3">When do you want it?</label>
+                        <div className="grid grid-cols-2 gap-3 mb-4">
+                            <button type="button" onClick={() => { setPickupType('asap'); setScheduledTime(''); }} className={`p-4 rounded-2xl border-2 text-center transition font-bold ${pickupType === 'asap' ? 'border-stone-900 bg-stone-900 text-white shadow-lg' : 'border-stone-200 bg-white text-stone-600 hover:border-stone-300'}`}>
+                                <span className="block text-lg mb-1">⚡</span>
+                                <span className="block text-sm">ASAP</span>
+                                <span className="block text-[9px] font-normal mt-1 opacity-70">As fast as possible</span>
+                            </button>
+                            <button type="button" onClick={() => setPickupType('scheduled')} className={`p-4 rounded-2xl border-2 text-center transition font-bold ${pickupType === 'scheduled' ? 'border-stone-900 bg-stone-900 text-white shadow-lg' : 'border-stone-200 bg-white text-stone-600 hover:border-stone-300'}`}>
+                                <span className="block text-lg mb-1">🕐</span>
+                                <span className="block text-sm">Schedule</span>
+                                <span className="block text-[9px] font-normal mt-1 opacity-70">Pick a time</span>
+                            </button>
+                        </div>
+                        {pickupType === 'scheduled' && (
+                            <div className="grid grid-cols-3 gap-2 animate-fade-in">
+                                {timeSlots.map(slot => (
+                                    <button key={slot} type="button" onClick={() => setScheduledTime(slot)} className={`py-3 px-2 rounded-xl text-xs font-bold transition ${scheduledTime === slot ? 'bg-orange-500 text-white shadow-md' : 'bg-stone-50 text-stone-600 border border-stone-200 hover:border-orange-300'}`}>{slot}</button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
 
                     <div className="bg-white p-6 rounded-[2rem] border border-stone-200 shadow-sm mt-6">
                         <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-3">Parking Spot Info (Optional)</label>
@@ -3050,7 +3961,7 @@ const Checkout = ({ setView, userProfile, setUserProfile, handlePlaceOrder, cart
                     )}
                     <div className="flex justify-between text-sm mb-2 text-stone-600"><span>Subtotal</span><span className="font-bold">${subtotal.toFixed(2)}</span></div>
                     <div className="flex justify-between text-sm mb-2 text-orange-500 font-bold"><span>Curbside Fee</span><span>${fee.toFixed(2)}</span></div>
-                    <div className="flex justify-between text-sm mb-2 text-stone-400"><span>Payment Processing</span><span>${stripeFee.toFixed(2)}</span></div>
+                    <div className="flex justify-between text-sm mb-2 text-stone-400"><span>Pull Up Service Fee</span><span>${PLATFORM_SERVICE_FEE.toFixed(2)}</span></div>
                     <div className="flex justify-between text-3xl font-serif font-bold text-stone-900 mt-6 pt-6 border-t border-stone-100 italic"><span>Total</span><span>${total}</span></div>
                     <div className="mt-4 flex items-center gap-2 text-[10px] text-stone-400 uppercase tracking-widest">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
@@ -3066,8 +3977,8 @@ const Checkout = ({ setView, userProfile, setUserProfile, handlePlaceOrder, cart
 
             <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-stone-50 via-stone-50/90 to-transparent z-30">
                 <div className="max-w-md mx-auto">
-                    <button onClick={() => handlePlaceOrder(details, carPhoto, gpsEnabled)} disabled={!agreed || !userProfile.name || !userProfile.plate || cartBelowMin} className={`w-full py-5 rounded-[2rem] font-bold text-sm uppercase tracking-widest shadow-xl flex justify-center items-center gap-3 transition ${agreed && userProfile.name && userProfile.plate && !cartBelowMin ? 'bg-stone-900 text-white active:scale-[0.98]' : 'bg-stone-300 text-stone-500 shadow-none'}`}>
-                        PAY & PULL UP
+                    <button onClick={() => handlePlaceOrder(details, carPhoto, gpsEnabled, pickupType === 'scheduled' ? scheduledTime : 'ASAP')} disabled={!agreed || !userProfile.name || !userProfile.plate || cartBelowMin || (pickupType === 'scheduled' && !scheduledTime)} className={`w-full py-5 rounded-[2rem] font-bold text-sm uppercase tracking-widest shadow-xl flex justify-center items-center gap-3 transition ${agreed && userProfile.name && userProfile.plate && !cartBelowMin && !(pickupType === 'scheduled' && !scheduledTime) ? 'bg-stone-900 text-white active:scale-[0.98]' : 'bg-stone-300 text-stone-500 shadow-none'}`}>
+                        {pickupType === 'scheduled' && scheduledTime ? `PAY · PICKUP ${scheduledTime.toUpperCase()}` : 'PAY & PULL UP'}
                     </button>
                 </div>
             </div>
@@ -3201,7 +4112,7 @@ const Tracking = ({ setView, orderId, db, selectedCafe }: any) => {
     if (orderInfo.status === 'rejected') return (
         <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 text-center animate-fade-in font-sans">
             <div className="bg-white border border-stone-200 text-stone-900 w-24 h-24 rounded-full flex items-center justify-center mb-6 shadow-sm"><Icons.X /></div>
-            <h2 className="text-5xl font-serif italic text-stone-900 mb-2 font-bold tracking-tight">Declined.</h2>
+            <h2 className="text-3xl sm:text-5xl font-serif italic text-stone-900 mb-2 font-bold tracking-tight">Declined.</h2>
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-200 max-w-sm w-full mb-8 mt-6">
                 <p className="text-stone-400 text-[10px] uppercase tracking-widest font-bold mb-3">Message from Cafe</p>
                 <p className="text-lg font-serif text-stone-900 font-bold italic">"{orderInfo.rejectionReason || 'Too busy right now'}"</p>
@@ -3212,7 +4123,7 @@ const Tracking = ({ setView, orderId, db, selectedCafe }: any) => {
     );
 
     return (
-        <div className="min-h-screen bg-stone-900 text-white flex flex-col items-center justify-center p-8 text-center animate-fade-in relative overflow-hidden font-sans">
+        <div className="min-h-screen bg-stone-900 text-white flex flex-col items-center justify-center p-4 sm:p-8 text-center animate-fade-in relative overflow-hidden font-sans">
             <button onClick={() => setShowSupport(true)} className="absolute top-6 right-6 text-[10px] font-bold uppercase tracking-widest text-stone-300 hover:text-white border border-stone-700 bg-stone-900/50 backdrop-blur-md px-5 py-3 rounded-full transition z-50 shadow-lg">Help / Issue?</button>
             <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&w=1200&q=60')] opacity-20 bg-cover bg-center grayscale scale-110 blur-sm"></div>
             <div className="absolute inset-0 bg-gradient-to-b from-stone-900/50 via-stone-900/80 to-stone-900 z-0"></div>
@@ -3223,7 +4134,7 @@ const Tracking = ({ setView, orderId, db, selectedCafe }: any) => {
                 </div>
             </div>
             
-            <h2 className="text-5xl font-serif italic mb-10 leading-tight tracking-tight relative z-10 text-white drop-shadow-lg font-bold">
+            <h2 className="text-3xl sm:text-5xl font-serif italic mb-6 sm:mb-10 leading-tight tracking-tight relative z-10 text-white drop-shadow-lg font-bold">
                 {orderInfo.status === 'pending' && "Awaiting Cafe..."}
                 {orderInfo.status === 'preparing' && !orderInfo.isArriving && <span className="text-orange-400">Order Accepted.<br/>Making it now.</span>}
                 {orderInfo.status === 'ready' && !orderInfo.isArriving && <span className="text-orange-300">Order Ready.<br/>Pull up close and tap the app button.</span>}
@@ -3232,9 +4143,9 @@ const Tracking = ({ setView, orderId, db, selectedCafe }: any) => {
                 {orderInfo.status === 'completed' && <span className="text-green-400">Order Complete.</span>}
             </h2>
 
-            <div className={`bg-stone-900/80 backdrop-blur-xl p-12 rounded-[3rem] w-full max-w-sm shadow-2xl text-white relative z-10 mb-8 border border-stone-800 transition-all duration-1000 ${orderInfo.isArriving && orderInfo.status !== 'completed' ? 'ring-2 ring-green-400/50 scale-105' : ''}`}>
+            <div className={`bg-stone-900/80 backdrop-blur-xl p-6 sm:p-12 rounded-2xl sm:rounded-[3rem] w-full max-w-sm shadow-2xl text-white relative z-10 mb-8 border border-stone-800 transition-all duration-1000 ${orderInfo.isArriving && orderInfo.status !== 'completed' ? 'ring-2 ring-green-400/50 scale-105' : ''}`}>
                 <p className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.4em] mb-4">Live Distance</p>
-                <p className="text-8xl font-serif italic mb-2 tracking-tighter font-bold">
+                <p className="text-5xl sm:text-8xl font-serif italic mb-2 tracking-tighter font-bold">
                     {orderInfo.status === 'completed' ? 'Done' : (distance !== null ? `${distance}m` : '--')}
                 </p>
                 {orderInfo.status !== 'completed' && !gpsEnabledForOrder && <p className="text-[10px] text-stone-300 font-bold uppercase tracking-widest mt-3">GPS sharing is off. Tap "I'm here" when close.</p>}
@@ -3306,6 +4217,7 @@ export default function App() {
     const [orderId, setOrderId] = useState(null);
     const [dashboardInitialTab, setDashboardInitialTab] = useState('orders');
     const [userProfile, setUserProfile] = useState({ name: '', carModel: '', carColor: '', plate: '', mobile: '' });
+    const pending2faRef = useRef(false);
     const isFirebaseAvailable = Boolean(db && auth);
 
     const openLegal = (modalType: any) => setActiveModal(modalType);
@@ -3320,8 +4232,40 @@ export default function App() {
         if (!db) return;
 
         const params = new URLSearchParams(window.location.search);
+
+        // Handle Stripe Connect return — verify onboarding completion
+        const stripeReturn = params.get('stripe_return');
+        const stripeAcct = params.get('acct');
+        if (stripeReturn && stripeAcct) {
+            if (stripeReturn === 'complete') {
+                // Verify the account is fully onboarded
+                fetch('/api/stripe/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stripeId: stripeAcct, cafeId: auth?.currentUser?.uid || '' })
+                }).then(async (res) => {
+                    const data = await res.json();
+                    if (data.isReady) {
+                        alert('Stripe connected successfully! Your cafe can now receive payouts.');
+                    } else {
+                        alert('Stripe onboarding started but not yet complete. Go to Settings → Connect Stripe Payouts to finish setup.');
+                    }
+                }).catch(() => {
+                    alert('Stripe onboarding returned. If payouts are not showing as connected, try clicking Connect Stripe Payouts again.');
+                });
+            } else if (stripeReturn === 'refresh') {
+                alert('Stripe onboarding session expired. Please click Connect Stripe Payouts to try again.');
+            }
+            window.history.replaceState(null, '', '/');
+        }
+
         if (params.get('merch_success') === 'true') {
-            alert('Payment successful! Your Founders cap is being embroidered and shipped.');
+            const merchTier = params.get('tier');
+            if (merchTier === 'hat') {
+                alert('Payment successful! Your Founders Cap is being embroidered and shipped. You\'ll receive a tracking email once dispatched.');
+            } else {
+                alert('Thank you for your support! Your contribution helps keep Pull Up Coffee running. A confirmation email has been sent.');
+            }
             window.history.replaceState(null, '', '/');
             setView('landing');
             return;
@@ -3386,11 +4330,21 @@ export default function App() {
             // Clean up previous profile listener
             if (unsubProfile) { unsubProfile(); unsubProfile = null; }
             if (u && !u.isAnonymous) {
+                // If 2FA check is in progress, don't redirect to dashboard yet
+                if (pending2faRef.current) {
+                    setLoading(false);
+                    return;
+                }
                 // Use live listener so approval changes propagate instantly — no page refresh needed
                 unsubProfile = onSnapshot(doc(db, 'cafes', u.uid), (snap) => {
                     if (snap.exists()) {
                         const data = snap.data() as any;
                         setCafeProfile(data);
+                        if (pending2faRef.current) {
+                            // Still in 2FA flow — don't redirect
+                            setLoading(false);
+                            return;
+                        }
                         if (data.isApproved) {
                             setDashboardInitialTab('orders');
                             setView('cafe-admin');
@@ -3427,15 +4381,47 @@ export default function App() {
         return () => window.removeEventListener('pullup-open-business-support', openBusinessSupport as EventListener);
     }, [cafeProfile]);
 
-    // Load Approved Cafes for Discovery
+    // Load Approved Cafes for Discovery (exclude platform admin accounts)
     useEffect(() => {
         if (!db) return;
         const q = query(collection(db, 'cafes'), where('isApproved', '==', true));
-        return onSnapshot(q, (snap) => setAllCafes(snap.docs.map(d => ({ id: d.id, ...d.data() })) as any));
+        return onSnapshot(q, (snap) => setAllCafes(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((c: any) => !c.isPlatformAdmin && c.role !== 'platform_admin') as any));
     }, []);
 
+    // ── Analytics Beacon ── tracks page views to /api/analytics/track
+    const pageViewCount = useRef(0);
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        // Generate or retrieve session fingerprint
+        let sessionId = sessionStorage.getItem('pullup_sid');
+        if (!sessionId) {
+            sessionId = crypto.randomUUID?.() || Math.random().toString(36).slice(2) + Date.now().toString(36);
+            sessionStorage.setItem('pullup_sid', sessionId);
+        }
+        pageViewCount.current += 1;
+        const loadTime = typeof performance !== 'undefined' && performance.timing
+            ? performance.timing.loadEventEnd - performance.timing.navigationStart
+            : 0;
+        const beacon = {
+            path: window.location.pathname,
+            view,
+            referrer: document.referrer || '',
+            sessionId,
+            pageInSession: pageViewCount.current,
+            screenWidth: window.screen?.width || 0,
+            screenHeight: window.screen?.height || 0,
+            loadTime: pageViewCount.current === 1 ? loadTime : 0,
+        };
+        // Fire-and-forget — never block rendering
+        fetch('/api/analytics/track', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(beacon),
+        }).catch(() => {}); // silently fail
+    }, [view]);
+
     // Master Checkout Function (Posts to Stripe)
-    const handlePlaceOrder = async (details: string, carPhoto: string | null, gpsEnabled: boolean) => {
+    const handlePlaceOrder = async (details: string, carPhoto: string | null, gpsEnabled: boolean, pickupTime?: string) => {
         if (!db || !auth) {
             alert('Service temporarily unavailable. Please try again in a moment.');
             return;
@@ -3477,7 +4463,7 @@ export default function App() {
             plate: userProfile.plate,
             mobile: userProfile.mobile,
             items: cart,
-            total: (cart.reduce((s: any, i: any) => s + i.price, 0) + fee).toFixed(2),
+            total: (cart.reduce((s: any, i: any) => s + i.price, 0) + fee + PLATFORM_SERVICE_FEE).toFixed(2),
             fee: fee,
             status: 'pending',
             paymentState: 'authorization_pending',
@@ -3486,6 +4472,7 @@ export default function App() {
             statusUpdatedAt: new Date().toISOString(),
             locationDetails: details,
             photo: carPhoto,
+            pickupTime: pickupTime || 'ASAP',
             isArriving: false,
             timestamp: new Date().toISOString()
         };
@@ -3534,7 +4521,7 @@ export default function App() {
             {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
             {activeModal && <LegalDocumentModal type={activeModal} onClose={() => setActiveModal(null)} />}
             {view === 'landing' && <LandingPage setView={setView} onAbout={() => setShowAbout(true)} openLegal={openLegal} />}
-            {view === 'merchant-login' && <BusinessLogin setView={setView} auth={auth} openLegal={openLegal} />}
+            {view === 'merchant-login' && <BusinessLogin setView={setView} auth={auth} openLegal={openLegal} pending2faRef={pending2faRef} />}
             {view === 'merchant-signup' && <BusinessSignup setView={setView} auth={auth} db={db} openLegal={openLegal} />}
             {view === 'discovery' && <Discovery setView={setView} cafes={allCafes} onSelectCafe={(c:any) => { setSelectedCafe(c); setView('cafe-menu'); }} />}
             {view === 'cafe-menu' && <CafeMenu setView={setView} selectedCafe={selectedCafe} cart={cart} setCart={setCart} db={db} auth={auth} user={user} />}

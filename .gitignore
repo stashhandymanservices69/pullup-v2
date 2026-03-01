@@ -21,6 +21,7 @@ pullup-app/.next/
 .env.test.local
 .env.production.local
 pullup-app/.env*
+CONFIDENTIAL-CREDENTIALS.md
 
 # vercel
 .vercel

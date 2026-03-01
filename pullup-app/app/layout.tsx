@@ -16,11 +16,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Pull Up Coffee — Curbside Coffee, Instantly",
   description: "Order from local cafes and pick up curbside. No queues, no parking, no hassle. Australia's curbside coffee platform.",
-  metadataBase: new URL("https://pullupcoffee.com.au"),
+  metadataBase: new URL("https://pullupcoffee.com"),
   openGraph: {
     title: "Pull Up Coffee — Curbside Coffee, Instantly",
     description: "Order from local cafes and pick up curbside. No queues, no parking, no hassle.",
-    url: "https://pullupcoffee.com.au",
+    url: "https://pullupcoffee.com",
     siteName: "Pull Up Coffee",
     locale: "en_AU",
     type: "website",

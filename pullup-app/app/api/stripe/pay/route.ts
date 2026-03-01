@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { checkRateLimit, isValidCafeId, parseJson, requireAllowedOrigin, requireJsonContentType, serverError } from '@/app/api/_lib/requestSecurity';
 import { getStripeClient, stripeConfigErrorResponse } from '@/app/api/_lib/stripeServer';
+import { getAdminDb } from '@/app/api/_lib/firebaseAdmin';
+import { getCurrency } from '@/lib/i18n';
 
 type PayItem = {
   name: string;
@@ -52,21 +54,34 @@ export async function POST(req: Request) {
     }
 
     const typedItems = items as PayItem[];
-    const serviceFee = 2.00; // Your standard fee
-    const platformCut = 0.40; // 20% of the $2.00 fee
-    
-    const feeAmountCents = Math.round(platformCut * 100);
+
+    // ── $0.99 Flat Service Fee Model (Model F) ──────────────────
+    // Platform revenue = flat $0.99 per order (Pull Up Service Fee)
+    // Cafe keeps 100% of menu prices + 100% of curbside fee
+    // Stripe processing (~1.75% + 30¢) absorbed by cafe
+    const PLATFORM_SERVICE_FEE_CENTS = 99; // $0.99 flat platform fee
+
+    // Determine currency from cafe country
+    let cafeCurrency = 'aud';
+    if (cafeId) {
+      try {
+        const db = getAdminDb();
+        const cafeDoc = await db.collection('cafes').doc(cafeId).get();
+        cafeCurrency = getCurrency(cafeDoc.data()?.country || 'AU');
+      } catch { /* fallback to aud */ }
+    }
 
     const origin = req.headers.get('origin') as string;
 
-    // 2. Create the session with a Destination Charge
-    // The customer pays, Stripe takes your cut, and sends the rest to the Cafe
+    // Build line items — menu items + Pull Up Service Fee
+    // Curbside fee is handled separately in the checkout route; this route
+    // is used for Stripe Connect destination charges.
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
         ...typedItems.map((item) => ({
           price_data: {
-            currency: 'aud',
+            currency: cafeCurrency,
             product_data: { name: item.name },
             unit_amount: Math.round(item.price * 100),
           },
@@ -74,16 +89,16 @@ export async function POST(req: Request) {
         })),
         {
           price_data: {
-            currency: 'aud',
-            product_data: { name: 'Curbside Service Fee' },
-            unit_amount: Math.round(serviceFee * 100),
+            currency: cafeCurrency,
+            product_data: { name: 'Pull Up Service Fee' },
+            unit_amount: PLATFORM_SERVICE_FEE_CENTS,
           },
           quantity: 1,
         }
       ],
       mode: 'payment',
       payment_intent_data: {
-        application_fee_amount: feeAmountCents,
+        application_fee_amount: PLATFORM_SERVICE_FEE_CENTS,
         transfer_data: { destination: cafeStripeId },
       },
       success_url: `${origin}/?view=success&orderId={CHECKOUT_SESSION_ID}`,

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { checkRateLimit, requireAllowedOrigin, requireJsonContentType, serverError } from '@/app/api/_lib/requestSecurity';
 import { getStripeClient, stripeConfigErrorResponse } from '@/app/api/_lib/stripeServer';
+import { SUPPORTED_COUNTRIES } from '@/lib/i18n';
 
 export async function POST(req: Request) {
   try {
@@ -39,12 +40,15 @@ export async function POST(req: Request) {
       }
     }
 
+    // Merch uses AUD by default (shipped from AU), but accept currency preference
+    const merchCurrency = 'aud';
+
     const sessionParams: any = {
       payment_method_types: ['card'],
       line_items: [
         {
           price_data: {
-            currency: 'aud',
+            currency: merchCurrency,
             product_data: { name: config.name, description: config.description },
             unit_amount: config.amount,
           },
@@ -53,18 +57,21 @@ export async function POST(req: Request) {
       ],
       mode: 'payment',
       metadata: { tier, fulfillment: config.needsShipping ? 'printful' : 'none' },
-      success_url: `${origin}?merch_success=true`,
+      success_url: `${origin}?merch_success=true&tier=${encodeURIComponent(tier)}`,
       cancel_url: `${origin}`,
     };
 
+    // Allow shipping to all supported countries
+    const shippingCountries = SUPPORTED_COUNTRIES.map(c => c.code);
+
     if (config.needsShipping) {
-      sessionParams.shipping_address_collection = { allowed_countries: ['AU'] };
+      sessionParams.shipping_address_collection = { allowed_countries: shippingCountries };
       sessionParams.shipping_options = [
         {
           shipping_rate_data: {
             type: 'fixed_amount',
-            fixed_amount: { amount: 1000, currency: 'aud' },
-            display_name: 'Standard Aussie Delivery',
+            fixed_amount: { amount: 1000, currency: merchCurrency },
+            display_name: 'Standard Delivery',
             delivery_estimate: {
               minimum: { unit: 'business_day', value: 3 },
               maximum: { unit: 'business_day', value: 7 },

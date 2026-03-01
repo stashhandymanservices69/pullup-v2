@@ -1,1 +1,16 @@
-{}
+{
+  "crons": [
+    {
+      "path": "/api/cron/sweep",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/onboarding-nudge",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/survey",
+      "schedule": "0 0 1 * *"
+    }
+  ]
+}

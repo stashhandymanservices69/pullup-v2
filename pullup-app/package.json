@@ -10,14 +10,15 @@
   },
   "dependencies": {
     "@googlemaps/google-maps-services-js": "^3.4.2",
+    "@types/leaflet": "^1.9.21",
     "@vercel/analytics": "^1.6.1",
     "firebase": "^12.9.0",
     "firebase-admin": "^13.6.1",
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.575.0",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "react-google-recaptcha": "^3.1.0",
     "resend": "^6.9.2",
     "stripe": "^20.3.1",
     "twilio": "^5.12.2"
@@ -27,9 +28,10 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@types/react-google-recaptcha": "^2.1.9",
+    "dotenv": "^17.3.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "pdf-parse": "^2.4.5",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

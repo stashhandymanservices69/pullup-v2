@@ -3,6 +3,7 @@ import { checkRateLimit, isValidCafeId, parseJson, requireAllowedOrigin, require
 import { getStripeClient, stripeConfigErrorResponse } from '@/app/api/_lib/stripeServer';
 import { getAdminDb } from '@/app/api/_lib/firebaseAdmin';
 import { detectBot, checkIdempotency } from '@/app/api/_lib/botDefense';
+import { getCurrency } from '@/lib/i18n';
 
 type CheckoutCartItem = {
   name: string;
@@ -40,6 +41,15 @@ const getMenuPrices = async (cafeId: string): Promise<Map<string, number> | null
   } catch {
     return null; // DB failure — fall back to ceiling-only validation
   }
+};
+
+/** Get cafe's country code from Firestore */
+const getCafeCountry = async (cafeId: string): Promise<string> => {
+  try {
+    const db = getAdminDb();
+    const doc = await db.collection('cafes').doc(cafeId).get();
+    return doc.exists ? (doc.data()?.country || 'AU') : 'AU';
+  } catch { return 'AU'; }
 };
 
 export async function POST(req: Request) {
@@ -85,7 +95,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid cafeId' }, { status: 400 });
     }
 
-    if (typeof fee !== 'undefined' && (typeof fee !== 'number' || Number.isNaN(fee) || fee < 0 || fee > 20)) {
+    if (typeof fee !== 'undefined' && (typeof fee !== 'number' || Number.isNaN(fee) || fee < 0 || fee > 25)) {
       return NextResponse.json({ error: 'Invalid fee' }, { status: 400 });
     }
 
@@ -129,41 +139,42 @@ export async function POST(req: Request) {
       }
     }
 
+    // Determine cafe currency from country setting
+    const cafeCountry = cafeId ? await getCafeCountry(cafeId) : 'AU';
+    const cafeCurrency = getCurrency(cafeCountry);
+
     const lineItems = (cart as CheckoutCartItem[]).map((item) => ({
       price_data: {
-        currency: 'aud',
+        currency: cafeCurrency,
         product_data: { name: `${item.name} (${item.size}, ${item.milk})`.slice(0, 250) },
         unit_amount: Math.round(item.price * 100), 
       },
       quantity: 1,
     }));
 
-    // Dynamic Pull Up Curbside Fee
-    const curbsideFeeAmount = Math.round((fee || 2) * 100);
-    lineItems.push({
-      price_data: {
-        currency: 'aud',
-        product_data: { name: 'Pull Up Curbside Fee' },
-        unit_amount: curbsideFeeAmount, 
-      },
-      quantity: 1,
-    });
-
-    // Dynamic Pass-Through: calculate Stripe processing fee and add as line item
-    const subtotalCents = lineItems.reduce((sum, item) => sum + item.price_data.unit_amount * item.quantity, 0);
-    const totalWithProcessing = Math.ceil((subtotalCents + 30) / (1 - 0.0175));
-    const processingFeeCents = totalWithProcessing - subtotalCents;
-
-    if (processingFeeCents > 0) {
+    // Dynamic Pull Up Curbside Fee (100% to cafe)
+    const curbsideFeeAmount = Math.round((fee || 0) * 100);
+    if (curbsideFeeAmount > 0) {
       lineItems.push({
         price_data: {
-          currency: 'aud',
-          product_data: { name: 'Payment Processing (Stripe)' },
-          unit_amount: processingFeeCents,
+          currency: cafeCurrency,
+          product_data: { name: 'Curbside Fee' },
+          unit_amount: curbsideFeeAmount, 
         },
         quantity: 1,
       });
     }
+
+    // Flat $0.99 Pull Up Service Fee (platform revenue)
+    const PLATFORM_SERVICE_FEE_CENTS = 99;
+    lineItems.push({
+      price_data: {
+        currency: cafeCurrency,
+        product_data: { name: 'Pull Up Service Fee' },
+        unit_amount: PLATFORM_SERVICE_FEE_CENTS,
+      },
+      quantity: 1,
+    });
 
     const safeCafeId = cafeId || '';
 

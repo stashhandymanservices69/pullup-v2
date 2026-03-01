@@ -5,7 +5,7 @@ const apiKey = process.env.RESEND_API_KEY;
 const resend = apiKey ? new Resend(apiKey) : null;
 
 // Verified sender – update once you verify your domain in Resend dashboard
-const FROM_ADDRESS = process.env.RESEND_FROM_EMAIL || 'Pull Up Coffee <hello@pullupcoffee.com.au>';
+const FROM_ADDRESS = process.env.RESEND_FROM_EMAIL || 'Pull Up Coffee <hello@pullupcoffee.com>';
 
 // ── Shared styles ─────────────────────────────────────────────
 
@@ -25,7 +25,7 @@ const emailWrapper = (body: string) => `
     </div>
     <div style="padding:20px 32px; background:#fafaf9; border-top:1px solid #e7e5e4; text-align:center; font-size:12px; color:#a8a29e;">
       <p style="margin:0;">Pull Up Coffee Pty Ltd · ABN 17 587 686 972</p>
-      <p style="margin:4px 0 0;"><a href="https://pullupcoffee.com.au" style="color:${BRAND_ORANGE}; text-decoration:none;">pullupcoffee.com.au</a> · <a href="mailto:hello@pullupcoffee.com.au" style="color:${BRAND_ORANGE}; text-decoration:none;">hello@pullupcoffee.com.au</a></p>
+      <p style="margin:4px 0 0;"><a href="https://pullupcoffee.com" style="color:${BRAND_ORANGE}; text-decoration:none;">pullupcoffee.com</a> · <a href="mailto:hello@pullupcoffee.com" style="color:${BRAND_ORANGE}; text-decoration:none;">hello@pullupcoffee.com</a></p>
     </div>
   </div>
 </div>`.trim();
@@ -55,7 +55,7 @@ export function buildApprovalEmail(businessName: string, email: string) {
     <p>Great news — your Pull Up Coffee application has been <strong>approved</strong>.</p>
 
     <p style="text-align:center; margin:24px 0;">
-      ${btn('LOG IN TO YOUR DASHBOARD', 'https://pullupcoffee.com.au')}
+      ${btn('LOG IN TO YOUR DASHBOARD', 'https://pullupcoffee.com')}
     </p>
 
     <p style="font-size:13px; color:#78716c;">📧 Your login email: ${escapeHtml(email)}</p>
@@ -73,7 +73,7 @@ export function buildApprovalEmail(businessName: string, email: string) {
 
     <h3 style="color:${BRAND_DARK};">Need Help?</h3>
     <ul style="padding-left:18px;">
-      <li>Support: <a href="mailto:hello@pullupcoffee.com.au" style="color:${LINK_BLUE};">hello@pullupcoffee.com.au</a></li>
+      <li>Support: <a href="mailto:hello@pullupcoffee.com" style="color:${LINK_BLUE};">hello@pullupcoffee.com</a></li>
       <li>Chat bot available in your dashboard <em>(Support tab)</em></li>
     </ul>
 
@@ -84,7 +84,7 @@ export function buildApprovalEmail(businessName: string, email: string) {
 
 Great news — your Pull Up Coffee application has been approved!
 
-Log in: https://pullupcoffee.com.au
+Log in: https://pullupcoffee.com
 Email: ${email}
 
 Next Steps:
@@ -97,7 +97,7 @@ Next Steps:
 You'll start receiving orders immediately once you're live!
 
 Need Help?
-- Support: hello@pullupcoffee.com.au
+- Support: hello@pullupcoffee.com
 - Chat bot: Available in dashboard (Support tab)
 
 Cheers,
@@ -248,7 +248,7 @@ export function buildOrderDeclinedEmail(ctx: {
     <p>We're sorry about the inconvenience. You can place a new order anytime!</p>
 
     <p style="text-align:center; margin:20px 0;">
-      ${btn('ORDER AGAIN', 'https://pullupcoffee.com.au')}
+      ${btn('ORDER AGAIN', 'https://pullupcoffee.com')}
     </p>
 
     ${signoff}
@@ -262,7 +262,7 @@ Unfortunately, ${ctx.cafeName} was unable to fulfill your order #${ctx.orderId.s
 ${ctx.reason ? 'Reason: ' + ctx.reason + '\n' : ''}
 No charge — your payment hold has been released. You have not been charged.
 
-You can place a new order anytime at https://pullupcoffee.com.au
+You can place a new order anytime at https://pullupcoffee.com
 
 Cheers,
 Steven
@@ -297,7 +297,7 @@ export function buildOnboardingNudgeEmail(ctx: {
     <p><strong>Pro tip:</strong> The #1 driver of orders is the QR poster. Place it at the drive-through window, entrance, or counter where customers can scan and order from their car.</p>
 
     <p style="text-align:center; margin:24px 0;">
-      ${btn('OPEN YOUR DASHBOARD', 'https://pullupcoffee.com.au')}
+      ${btn('OPEN YOUR DASHBOARD', 'https://pullupcoffee.com')}
     </p>
 
     <p>Need a hand? Just reply to this email — I personally read every one.</p>
@@ -319,7 +319,7 @@ Quick Checklist:
 
 Pro tip: The #1 driver of orders is the QR poster. Place it at the drive-through, entrance, or counter.
 
-Log in: https://pullupcoffee.com.au
+Log in: https://pullupcoffee.com
 
 Need a hand? Just reply to this email — I personally read every one.
 
@@ -382,7 +382,70 @@ Founder, Pull Up Coffee`;
   return { subject, html, text };
 }
 
-/* ─── 7. MERCH ORDER CONFIRMATION (Hat / Printful) ─────────── */
+/* ─── 7a. SUPPORT / DONATION THANK YOU (Coffee, Legend, VIP) ── */
+
+export function buildSupportThankYouEmail(ctx: {
+  customerName: string;
+  customerEmail: string;
+  tierName: string;
+  amount: number;
+  tier: string;
+}) {
+  const isVip = ctx.tier === 'vip';
+  const subject = isVip
+    ? 'Welcome to the VIP list! 🏆 — Pull Up Coffee'
+    : 'Thank you for supporting Pull Up Coffee! ☕';
+
+  const vipSection = isVip ? `
+    <div style="background:#fefce8; border:1px solid #fef08a; border-radius:12px; padding:16px; margin:16px 0;">
+      <p style="margin:0; font-weight:700; font-size:15px;">🏆 VIP Status Confirmed</p>
+      <p style="margin:6px 0 0; font-size:13px; color:#78716c;">You're now on the official Pull Up VIP list. You'll receive exclusive event invites, free merch drops, and early access to new features.</p>
+    </div>` : '';
+
+  const html = emailWrapper(`
+    <h2 style="color:${BRAND_ORANGE}; margin-top:0;">Thank You for Your Support! ☕</h2>
+
+    <p>Hi <strong>${escapeHtml(ctx.customerName)}</strong>,</p>
+
+    <p>Your support means the world. Every contribution goes directly toward platform development, hosting, and keeping things running for our partner cafes.</p>
+
+    <div style="background:#fafaf9; border-radius:12px; padding:16px; margin:16px 0;">
+      <table style="width:100%; font-size:14px;">
+        <tr><td style="color:#78716c;">Contribution</td><td style="text-align:right; font-weight:600;">${escapeHtml(ctx.tierName)}</td></tr>
+        <tr><td style="color:#78716c;">Amount</td><td style="text-align:right; font-weight:700; color:${BRAND_ORANGE};">$${ctx.amount.toFixed(2)} AUD</td></tr>
+      </table>
+    </div>
+
+    ${vipSection}
+
+    <p style="text-align:center; margin:24px 0;">
+      ${btn('VISIT PULL UP COFFEE', 'https://pullupcoffee.com')}
+    </p>
+
+    <p style="font-size:13px; color:#78716c;">This is a digital contribution — no physical item will be shipped. If you have any questions, just reply to this email.</p>
+
+    ${signoff}
+  `);
+
+  const text = `Thank You for Your Support!
+
+Hi ${ctx.customerName},
+
+Your support means the world. Every contribution goes directly toward platform development, hosting, and keeping things running for our partner cafes.
+
+Contribution: ${ctx.tierName}
+Amount: $${ctx.amount.toFixed(2)} AUD
+${isVip ? '\n🏆 VIP Status Confirmed — you\'re now on the official Pull Up VIP list.\n' : ''}
+This is a digital contribution — no physical item will be shipped.
+
+Cheers,
+Steven
+Founder, Pull Up Coffee`;
+
+  return { subject, html, text };
+}
+
+/* ─── 7b. MERCH ORDER CONFIRMATION (Hat / Printful) ────────── */
 
 export function buildMerchOrderEmail(ctx: {
   customerName: string;
@@ -494,6 +557,142 @@ Founder, Pull Up Coffee`;
   return { subject, html, text };
 }
 
+/* ─── 9. AFFILIATE WELCOME EMAIL ───────────────────────────── */
+
+export function buildAffiliateWelcomeEmail(ctx: {
+  name: string;
+  referralCode: string;
+  email: string;
+}) {
+  const subject = `Welcome to the Pull Up Coffee Affiliate Program! 🤝`;
+  const siteUrl = 'https://pullupcoffee.com';
+
+  const html = emailWrapper(`
+    <h2 style="color:${BRAND_ORANGE}; margin-top:0;">You're In! 🎉</h2>
+
+    <p>Hi <strong>${escapeHtml(ctx.name)}</strong>,</p>
+
+    <p>Your affiliate application has been <strong>approved</strong>. Here's everything you need to start earning:</p>
+
+    <div style="background:#fef3c7; border:2px solid #f59e0b; border-radius:12px; padding:20px; margin:20px 0; text-align:center;">
+      <p style="margin:0 0 8px; font-size:12px; color:#92400e; text-transform:uppercase; letter-spacing:2px; font-weight:700;">Your Referral Code</p>
+      <p style="margin:0; font-size:28px; font-weight:900; color:#0f0f0f; letter-spacing:3px; font-family:monospace;">${escapeHtml(ctx.referralCode)}</p>
+    </div>
+
+    <h3 style="color:#0f0f0f; margin-top:24px;">How It Works</h3>
+    <ol style="font-size:14px; color:#57534e; line-height:1.8;">
+      <li><strong>Share your code</strong> with cafes, restaurants, and food businesses in your area</li>
+      <li>When they <strong>sign up at ${siteUrl}</strong> and enter your referral code, they're linked to you</li>
+      <li>You earn <strong>25% of the platform fee</strong> on every order for that business's <strong>first 30 calendar days</strong></li>
+      <li>Also encourage <strong>customers</strong> to use those businesses — more customers = more orders = more commission for you</li>
+    </ol>
+
+    <h3 style="color:#0f0f0f; margin-top:24px;">Commission Example</h3>
+    <p style="font-size:14px; color:#57534e;">Every order includes a flat $0.99 Pull Up Service Fee. You earn <strong>25% of that = ~$0.25 per order</strong>. The cafe keeps 100% of their menu prices + 100% of their curbside fee — your commission comes from the platform's share only. A busy cafe doing 50 orders/day = <strong>$12.50/day = $375 in your first month</strong> from just one cafe.</p>
+
+    <h3 style="color:#0f0f0f; margin-top:24px;">Important Rules</h3>
+    <ul style="font-size:13px; color:#57534e; line-height:1.8;">
+      <li>Commission applies for <strong>30 calendar days</strong> from each cafe's first transaction</li>
+      <li>All promotions must include affiliate disclosure: <em>"I earn a commission if you sign up via my link"</em></li>
+      <li>No bots, spam, fake accounts, or misleading claims</li>
+      <li>Breaches result in immediate termination and forfeiture of commissions</li>
+    </ul>
+
+    <p style="text-align:center; margin:28px 0;">
+      ${btn('VISIT PULL UP COFFEE', siteUrl)}
+    </p>
+
+    <p style="font-size:13px; color:#78716c;">Questions? Reply to this email or contact <a href="mailto:hello@pullupcoffee.com" style="color:${BRAND_ORANGE};">hello@pullupcoffee.com</a></p>
+
+    ${signoff}
+  `);
+
+  const text = `Welcome to the Pull Up Coffee Affiliate Program!
+
+Hi ${ctx.name},
+
+Your affiliate application has been approved!
+
+YOUR REFERRAL CODE: ${ctx.referralCode}
+
+How It Works:
+1. Share your code with cafes and food businesses
+2. When they sign up at ${siteUrl} and enter your code, they're linked to you
+3. You earn 25% of the platform fee for their first 30 days
+4. Encourage customers to order — more orders = more commission
+
+Commission Example:
+Every order includes a flat $0.99 Pull Up Service Fee. You earn ~$0.25 per order (25% of $0.99).
+50 orders/day = $12.50/day = $375 in your first month from just one cafe.
+
+Rules:
+- 30 calendar day commission window per cafe
+- Must include affiliate disclosure in promotions
+- No spam, bots, or fake accounts
+
+Visit: ${siteUrl}
+Questions: hello@pullupcoffee.com
+
+Cheers, Steven — Founder, Pull Up Coffee`;
+
+  return { subject, html, text };
+}
+
+/* ─── 10. SURVEY EMAIL ─────────────────────────────────────── */
+
+export function buildSurveyEmail(ctx: {
+  businessName: string;
+  surveyUrl?: string;
+  period?: string;
+  intro?: string;
+  questions?: string[];
+}) {
+  const period = ctx.period || new Date().toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
+  const subject = `📊 Pull Up Coffee — How are we doing? (${period})`;
+
+  const questionsHtml = ctx.questions?.length
+    ? `<ol style="margin:16px 0; padding-left:20px;">${ctx.questions.map(q => `<li style="margin-bottom:8px; font-size:14px; color:#44403c;">${escapeHtml(q)}</li>`).join('')}</ol>
+       <p style="font-size:13px; color:#78716c;">Hit <strong>reply</strong> to this email with your answers — we read every response.</p>`
+    : '';
+
+  const surveyButton = ctx.surveyUrl
+    ? `<p style="text-align:center; margin:24px 0;">${btn('TAKE THE SURVEY', ctx.surveyUrl)}</p>`
+    : '';
+
+  const introText = ctx.intro || 'You\'ve been part of Pull Up Coffee and we\'d love to hear how things are going. Your feedback directly shapes platform improvements.';
+
+  const html = emailWrapper(`
+    <h2 style="color:${BRAND_ORANGE}; margin-top:0;">We Value Your Feedback</h2>
+
+    <p>Hi <strong>${escapeHtml(ctx.businessName)}</strong> Team,</p>
+
+    <p>${escapeHtml(introText)}</p>
+
+    ${questionsHtml}
+    ${surveyButton}
+
+    <p style="font-size:13px; color:#78716c;">Your responses are reviewed by our team and help us prioritize new features, fix issues, and improve the experience for everyone.</p>
+
+    ${signoff}
+  `);
+
+  const questionsList = ctx.questions?.length
+    ? ctx.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')
+    : '';
+
+  const text = `Pull Up Coffee — Feedback Survey (${period})
+
+Hi ${ctx.businessName} Team,
+
+${introText}
+
+${questionsList ? `Questions:\n${questionsList}\n\nJust reply to this email with your answers!\n` : ''}${ctx.surveyUrl ? `Take our 2-minute survey: ${ctx.surveyUrl}\n` : ''}
+Your feedback directly shapes platform improvements.
+
+Cheers, Steven — Founder, Pull Up Coffee`;
+
+  return { subject, html, text };
+}
 
 
 interface SendResult {

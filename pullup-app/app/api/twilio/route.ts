@@ -35,7 +35,8 @@ const SMS_TEMPLATES: Record<string, (ctx: Record<string, string>) => string> = {
   'order-accepted':  (ctx) => `Pull Up Coffee: Great news! ${ctx.cafeName || 'Your cafe'} has accepted your order and started preparing it now.`.trim(),
   'order-declined':  (ctx) => `Pull Up Coffee: Sorry, ${ctx.cafeName || 'the cafe'} couldn't fulfill your order${ctx.reason ? ' (' + ctx.reason + ')' : ''}. Your payment hold has been released — you were not charged.`.trim(),
   'cafe-open':       (ctx) => `Pull Up Coffee: ${ctx.cafeName || 'A favourite cafe'} just opened! Order now for curbside pickup.`.trim(),
-  'cafe-approved':   (ctx) => `Pull Up Coffee: Great news! ${ctx.businessName || 'Your business'} has been approved! Log in at pullupcoffee.com.au to set up your menu and go live. Welcome aboard! ☕🚗`.trim(),
+  'cafe-approved':   (ctx) => `Pull Up Coffee: Great news! ${ctx.businessName || 'Your business'} has been approved! Log in at pullupcoffee.com to set up your menu and go live. Welcome aboard! ☕🚗`.trim(),
+  'delay':           (ctx) => `Pull Up Coffee: ${ctx.cafeName || 'Your cafe'} is running about 5 mins behind. Thanks for your patience!`.trim(),
   'login-code':      (ctx) => `Pull Up Coffee: Your login code is ${ctx.code || '------'}. Valid for 5 minutes. Do not share this code.`.trim(),
 };
 
