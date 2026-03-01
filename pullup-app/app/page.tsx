@@ -166,8 +166,9 @@ const MIN_CURBSIDE_FEE = 0.0;
 const MAX_CURBSIDE_FEE = 25.0;
 const PLATFORM_SERVICE_FEE = 0.99;
 const MIN_CART_TOTAL = 0;
-const EARLY_ADOPTER_CAFE_LIMIT = 100;
+const EARLY_ADOPTER_CAFE_LIMIT = 250;
 const EARLY_PARTNER_REBATE = 0.25;
+const EARLY_ADOPTER_ACTIVITY_DAYS = 30; // Must show activity within 30 days of approval or lose early adopter status
 const LIVE_GPS_AUTO_SHARE_DISTANCE_METERS = 2500;
 const LIVE_GPS_AUTO_SHARE_ETA_SECONDS = 300;
 const LIVE_GPS_ARRIVED_DISTANCE_METERS = 80;
@@ -1484,14 +1485,21 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
         const loadEarlyAdopterSpots = async () => {
             try {
                 const cafesSnap = await getDocs(collection(db, 'cafes'));
-                const remaining = Math.max(EARLY_ADOPTER_CAFE_LIMIT - cafesSnap.size, 0);
+                // Exclude platform admin accounts from the count, and filter by selected country
+                const realCafes = cafesSnap.docs.filter((d: any) => {
+                    const data = d.data();
+                    if (data.isPlatformAdmin === true || data.role === 'platform_admin') return false;
+                    if (data.country && data.country !== cafeCountry) return false;
+                    return true;
+                });
+                const remaining = Math.max(EARLY_ADOPTER_CAFE_LIMIT - realCafes.length, 0);
                 setEarlyAdopterSpotsLeft(remaining);
             } catch {
                 setEarlyAdopterSpotsLeft(null);
             }
         };
         loadEarlyAdopterSpots();
-    }, [db]);
+    }, [db, cafeCountry]);
 
     // Address autocomplete powered by OpenStreetMap Nominatim (free, no API key required)
 
@@ -1569,7 +1577,13 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
             }
             const res = await createUserWithEmailAndPassword(auth, email, pass);
             const cafesSnapshot = await getDocs(collection(db, 'cafes'));
-            const signupSequence = cafesSnapshot.size + 1;
+            // Count only real cafes in the same country (exclude admin accounts)
+            const sameCountryCafes = cafesSnapshot.docs.filter((d: any) => {
+                const data = d.data();
+                if (data.isPlatformAdmin === true || data.role === 'platform_admin') return false;
+                return data.country === cafeCountry;
+            });
+            const signupSequence = sameCountryCafes.length + 1;
             const earlyAdopterEligible = signupSequence <= EARLY_ADOPTER_CAFE_LIMIT;
 
             // Anti-resignup: check if this ABN was previously approved (blocks affiliate bonus abuse)
@@ -1609,13 +1623,15 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
                 transactionCostModel: earlyAdopterEligible ? 'early-adopter-partner-bonus' : 'standard-service-fee',
                 platformServiceFee: 0.99,
                 earlyPartnerRebate: earlyAdopterEligible ? 0.25 : 0,
+                earlyAdopterCountry: cafeCountry, // early adopter slots are per-country
+                ...(earlyAdopterEligible ? { earlyAdopterActivityDeadline: new Date(Date.now() + EARLY_ADOPTER_ACTIVITY_DAYS * 24 * 60 * 60 * 1000).toISOString() } : {}),
                 ...(referralCode.trim() && !referralBlocked ? { referredBy: referralCode.trim().toUpperCase() } : {}),
                 ...(referralBlocked ? { referralBlockedReason: 'ABN previously approved — anti-resignup guard' } : {}),
             });
 
             // Geocode address to lat/lng for distance-based discovery (fire-and-forget)
             try {
-                const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(address)}&countrycodes=au&limit=1`);
+                const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(address)}&countrycodes=${cafeCountry.toLowerCase()}&limit=1`);
                 if (geoRes.ok) {
                     const geoData = await geoRes.json();
                     if (geoData.length > 0) {
@@ -1746,10 +1762,15 @@ const BusinessSignup = ({ setView, auth, db, openLegal }: any) => {
                             <p className="text-[9px] uppercase tracking-widest font-bold text-orange-300">Early Adopter Incentive</p>
                             <p className="text-xs text-stone-200 mt-1">
                                 {earlyAdopterSpotsLeft === null
-                                    ? 'First 100 partner cafes receive a $0.25/order Partner Bonus for 12 months.'
+                                    ? `First ${EARLY_ADOPTER_CAFE_LIMIT} partner cafes per country receive a $0.25/order Partner Bonus.`
                                     : earlyAdopterSpotsLeft > 0
-                                        ? `${earlyAdopterSpotsLeft} of ${EARLY_ADOPTER_CAFE_LIMIT} spots left for the $0.25/order Partner Bonus (12 months).`
-                                        : `All ${EARLY_ADOPTER_CAFE_LIMIT} early adopter spots are filled. New signups use the standard $0.99 service fee model.`}
+                                        ? `${earlyAdopterSpotsLeft} of ${EARLY_ADOPTER_CAFE_LIMIT} spots left in your country for the $0.25/order Partner Bonus.`
+                                        : `All ${EARLY_ADOPTER_CAFE_LIMIT} early adopter spots in your country are filled. New signups use the standard $0.99 service fee model.`}
+                            </p>
+                            <p className="text-[9px] text-stone-400 mt-1.5 leading-relaxed">
+                                {earlyAdopterSpotsLeft !== null && earlyAdopterSpotsLeft > 0
+                                    ? 'Self-signup = 12 months bonus. Referred by an affiliate = 11 months bonus (after their 30-day commission window). Must complete at least one order or actively set up your menu within 30 days of approval to keep your spot.'
+                                    : ''}
                             </p>
                         </div>
                         
@@ -2462,7 +2483,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                 { id: 'logo', keywords: ['logo', 'branding', 'brand', 'image', 'avatar', 'profile picture', 'upload logo', 'change logo'], text: 'Fast answer: go to Account tab → Upload Logo. Use a square image for best results. Your logo appears in Discovery, menu view, and order notifications.' },
                 { id: 'affiliate', keywords: ['affiliate', 'referral', 'commission', 'refer', 'earn', 'refer a friend', 'invite'], text: 'Fast answer: Pull Up offers a 25% affiliate commission on the $0.99 platform fee (≈$0.25) for the first 30 days of every cafe you refer. Click "Affiliate (25% first month)" in the footer to apply instantly and get your unique referral code.' },
                 { id: 'security', keywords: ['security', 'safe', 'data', 'privacy', 'personal info', 'card details', 'encryption', 'protect'], text: 'Fast answer: all payments are processed through Stripe with 256-bit encryption. We never store card numbers. Customer data is encrypted and GPS data is purged after order completion. Full Privacy Act 1988 compliance.' },
-                { id: 'early-adopter', keywords: ['early adopter', 'founders', 'first 33', 'first 100', 'special', 'benefit', 'bonus', 'early bird'], text: 'Fast answer: the first 100 cafe partners are "Early Adopters" — you keep 100% of your menu prices + 100% of the curbside fee, and receive a $0.25/order Partner Bonus for 12 months. Standard Stripe processing applies as a normal business cost.' },
+                { id: 'early-adopter', keywords: ['early adopter', 'founders', 'first 33', 'first 250', 'first 100', 'special', 'benefit', 'bonus', 'early bird'], text: `Fast answer: the first ${EARLY_ADOPTER_CAFE_LIMIT} cafe partners per country are "Early Adopters" — you keep 100% of your menu prices + 100% of the curbside fee, and receive a $0.25/order Partner Bonus. Self-signup = 12 months. Referred by an affiliate = 11 months (after their 30-day commission window). Must show activity within 30 days of approval to keep your spot.` },
                 { id: 'merch', keywords: ['merch', 'merchandise', 'hat', 'cap', 'founders', 'shop', 'buy', 'gear', 'clothing'], text: 'Fast answer: visit the Merch Store from the main menu to grab limited-edition Pull Up Founders gear. Currently available: embroidered caps with AU shipping.' },
                 { id: 'approval', keywords: ['approv', 'pending', 'waiting', 'review', 'application', 'when will', 'not approved', 'approval email', 'didn\'t get', 'didnt get', 'not received', 'haven\'t received', 'havent received', 'missing email', 'no email', 'no sms', 'where is my', 'how long'], text: 'Fast answer: approvals are typically processed within 24 hours. Once approved, you will receive an email and SMS notification. If you have been waiting more than 24 hours, please email hello@pullupcoffee.com with your business name and we will prioritise your review.' },
                 { id: 'login', keywords: ['login', 'log in', 'sign in', 'can\'t login', 'cant login', 'locked out', 'forgot password', 'reset password', 'password reset', '2fa', 'two factor', 'verification code', 'otp'], text: 'Fast answer: if you forgot your password, go to Account → Reset Password. If you enabled 2FA, a 6-digit code will be sent to your mobile when you log in. Make sure to check your SMS. If you\'re still stuck, email hello@pullupcoffee.com.' },
@@ -2891,7 +2912,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                                     <p>The curbside fee is charged to customers for the convenience of curbside service. <strong>Range: $0.00 – $25.00</strong> — completely your choice. Set it to match your market.</p>
                                     <p><strong>Simple Fee Model:</strong> Customers pay a flat $0.99 Pull Up Service Fee per order. You keep <strong>100%</strong> of your menu prices and <strong>100%</strong> of the curbside fee. Stripe processing (~1.75% + 30¢) is absorbed as a normal business cost.</p>
                                     <p><strong>What You Keep:</strong> 100% of your menu prices + 100% of the curbside fee. The only deduction is standard Stripe processing on the total order value.</p>
-                                    {isEarlyAdopter && <p><strong>🎉 Early Adopter Bonus:</strong> As one of our first 100 partner cafes, you receive a $0.25/order Partner Bonus for 12 months — credited back to you from the platform fee.</p>}
+                                    {isEarlyAdopter && <p><strong>🎉 Early Adopter Bonus:</strong> As one of the first {EARLY_ADOPTER_CAFE_LIMIT} partner cafes in your country, you receive a $0.25/order Partner Bonus — credited back to you from the platform fee. {profile?.referredBy ? '11 months (after affiliate window).' : '12 months.'} Must complete at least one order or actively set up your menu within 30 days of approval to keep your spot.</p>}
                                     <p className="text-[10px] text-stone-500 italic mt-2">💡 Increase during peak hours, lower for promotions. Email hello@pullupcoffee.com to request a curbside fee above $25.00.</p>
                                 </div>
                                 <div className="mt-3 bg-stone-50 border border-stone-200 rounded-xl p-4 text-xs text-stone-700">
@@ -2955,7 +2976,7 @@ const CafeDashboard = ({ user, profile, db, auth, signOut, initialTab = 'orders'
                             
                             <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5 space-y-2">
                                 <p className="text-[10px] font-bold uppercase tracking-widest text-orange-600 mb-2">Platform Fee Structure</p>
-                                <p className="text-sm text-stone-700 leading-relaxed"><strong>Current Model:</strong> {isEarlyAdopter ? 'As an early adopter, you receive a $0.25/order Partner Bonus for 12 months — automatically returned from the $0.99 platform fee. You keep 100% of menu prices + 100% of curbside fee.' : 'Customers pay a flat $0.99 Pull Up Service Fee per order. You keep 100% of your menu prices and 100% of the curbside fee. Standard Stripe processing fees (~1.75% + 30¢) apply to the total transaction as a normal business cost.'}</p>
+                                <p className="text-sm text-stone-700 leading-relaxed"><strong>Current Model:</strong> {isEarlyAdopter ? `As an early adopter (first ${EARLY_ADOPTER_CAFE_LIMIT} per country), you receive a $0.25/order Partner Bonus for ${profile?.referredBy ? '11 months (after your referrer\'s 30-day affiliate window)' : '12 months'} — automatically returned from the $0.99 platform fee. You keep 100% of menu prices + 100% of curbside fee.` : 'Customers pay a flat $0.99 Pull Up Service Fee per order. You keep 100% of your menu prices and 100% of the curbside fee. Standard Stripe processing fees (~1.75% + 30¢) apply to the total transaction as a normal business cost.'}</p>
                                 <p className="text-sm text-stone-700 leading-relaxed"><strong>Our Commitment:</strong> We're constantly negotiating better payment processing rates and exploring competitive alternatives like PayPal to reduce your costs. We want this to be sustainable and profitable for everyone.</p>
                                 <p className="text-xs text-orange-600 font-semibold mt-3">💬 Have feedback on payment fees? Let us know—we're listening and adapting as we grow.</p>
                             </div>
@@ -4346,6 +4367,11 @@ export default function App() {
                             return;
                         }
                         if (data.isApproved) {
+                            // Platform admin → redirect to P.U.L.S.E. command centre
+                            if (data.isPlatformAdmin === true || data.role === 'platform_admin') {
+                                window.location.href = '/pulse';
+                                return;
+                            }
                             setDashboardInitialTab('orders');
                             setView('cafe-admin');
                         } else {
